@@ -27,6 +27,7 @@ process.on('SIGINT', () => { flush(); process.exit(0); });
 process.on('SIGTERM', () => { flush(); process.exit(0); });
 
 /* ---------- עזרים ---------- */
+const normName = v => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const rid = n => crypto.randomBytes(n).toString('hex');
 function scrypt(pw, salt) {
@@ -96,10 +97,10 @@ async function api(req, res, url) {
   const ip = ipOf(req);
   if (req.method === 'POST' && url.pathname === '/api/register') {
     const b = await readBody(req);
-    const name = String(b.username || '').trim().toLowerCase();
+    const name = normName(b.username);
     const pw = String(b.password || '');
     const role = b.role === 'coach' ? 'coach' : 'trainee';
-    if (!/^[a-z0-9_.֐-׿-]{3,24}$/.test(name)) return send(res, 400, { error: 'שם משתמש: 3 עד 24 תווים (אותיות, ספרות, נקודה או קו תחתון)' });
+    if (!/^[a-z0-9_.֐-׿ -]{3,24}$/.test(name)) return send(res, 400, { error: 'שם משתמש: 3 עד 24 תווים (אותיות, ספרות, רווח, נקודה או קו תחתון)' });
     if (pw.length < 6) return send(res, 400, { error: 'הסיסמה צריכה להכיל לפחות 6 תווים' });
     if (role === 'coach' && COACH_KEY && b.key !== COACH_KEY) return send(res, 403, { error: 'קוד ההרשמה למאמנים שגוי' });
     if (db.users[name]) return send(res, 409, { error: 'שם המשתמש תפוס, בחר אחר' });
@@ -111,7 +112,7 @@ async function api(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/login') {
     if (tooMany(ip)) return send(res, 429, { error: 'יותר מדי ניסיונות. נסה שוב בעוד כמה דקות' });
     const b = await readBody(req);
-    const user = db.users[String(b.username || '').trim().toLowerCase()];
+    const user = db.users[normName(b.username)];
     const ok = user && crypto.timingSafeEqual(Buffer.from(await scrypt(String(b.password || ''), user.salt), 'hex'), Buffer.from(user.hash, 'hex'));
     if (!ok) { fail(ip); return send(res, 401, { error: 'שם משתמש או סיסמה שגויים' }); }
     return send(res, 200, { ok: true }, { 'Set-Cookie': newSession(req, res, user) });
