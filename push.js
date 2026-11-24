@@ -52,7 +52,22 @@ module.exports = function (db, save, send, readBody, userFor) {
     const p = {};
     new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
       .formatToParts(new Date()).forEach(x => p[x.type] = x.value);
-    return { d: Math.round((Date.UTC(+p.year, +p.month - 1, +p.day) - Date.UTC(2020, 0, 1)) / 86400000), h: +p.hour };
+    const d = Math.round((Date.UTC(+p.year, +p.month - 1, +p.day) - Date.UTC(2020, 0, 1)) / 86400000);
+    return { d, h: +p.hour, dow: new Date(Date.UTC(2020, 0, 1) + d * 86400000).getUTCDay() };
+  }
+  function dayOf(ms) {
+    const p = {};
+    new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(ms)).forEach(x => p[x.type] = x.value);
+    return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day) - Date.UTC(2020, 0, 1)) / 86400000);
+  }
+  function weekStats(uid, n) {
+    const tr = parse('trainees/' + uid); if (!tr || !Array.isArray(tr.sessions)) return null;
+    const ws = n.d - n.dow; let cnt = 0, vol = 0;
+    tr.sessions.forEach(s => {
+      const dd = dayOf(s.date); if (dd < ws || dd > n.d) return; cnt++;
+      (s.exercises || []).forEach(e => (e.sets || []).forEach(x => { vol += (x.kg || 0) * (x.reps || 0); }));
+    });
+    return cnt ? { cnt, vol: Math.round(vol / 100) / 10, goal: Number(tr.profile && tr.profile.days) || 3 } : null;
   }
   function parse(k) { try { return JSON.parse(db.docs[k].json); } catch (e) { return null; } }
   function todays(uid, d) {
@@ -66,6 +81,16 @@ module.exports = function (db, save, send, readBody, userFor) {
     const n = nowIL();
     for (const uid in db.push) {
       const rec = db.push[uid];
+      if (rec && rec.subs && rec.subs.length && n.dow === 5 && n.h >= 11 && rec.wlast !== n.d) {
+        rec.wlast = n.d; save();
+        const w = weekStats(uid, n);
+        if (w) {
+          const msg = { title: 'סט · הסיכום השבועי שלך', body: w.cnt + ' מתוך ' + w.goal + ' אימונים השבוע' + (w.vol ? ' · ' + w.vol + ' טון נפח' : '') + (w.cnt >= w.goal ? '. שבוע מושלם! 🔥' : '. כל הכבוד על ההתמדה!'), url: '/' };
+          const keep = [];
+          for (const sb of rec.subs) { const code = await sendPush(sb, msg); if (code !== 404 && code !== 410) keep.push(sb); }
+          rec.subs = keep; save();
+        }
+      }
       if (!rec || !rec.subs || !rec.subs.length || rec.last === n.d || n.h < (rec.hour == null ? 17 : rec.hour)) continue;
       const t = todays(uid, n.d); if (!t) continue;
       rec.last = n.d; save();
