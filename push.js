@@ -90,13 +90,13 @@ module.exports = function (db, save, send, readBody, userFor) {
       if (!s || typeof s.endpoint !== 'string' || !/^https:\/\//.test(s.endpoint) || !s.keys || !s.keys.p256dh || !s.keys.auth) { send(res, 400, { error: 'bad' }); return true; }
       const r = db.push[me.id] = db.push[me.id] || { subs: [], hour: 17 };
       r.subs = r.subs.filter(x => x.endpoint !== s.endpoint).concat([{ endpoint: s.endpoint, keys: { p256dh: String(s.keys.p256dh), auth: String(s.keys.auth) } }]).slice(-5);
-      if (b.hour != null && b.hour >= 6 && b.hour <= 22) r.hour = Math.floor(b.hour);
+      if (b.hour != null && b.hour >= 6 && b.hour <= 22 && !(b.auto && r.custom)) { r.hour = Math.floor(b.hour); if (!b.auto) r.custom = true; }
       save(); send(res, 200, { ok: true }); return true;
     }
     if (req.method === 'POST' && url.pathname === '/api/push/hour') {
       const b = await readBody(req), r = db.push[me.id];
-      if (r && b.hour >= 6 && b.hour <= 22) { r.hour = Math.floor(b.hour); save(); }
-      send(res, 200, { ok: true }); return true;
+      if (r && b.hour >= 6 && b.hour <= 22 && !(b.auto && r.custom)) { r.hour = Math.floor(b.hour); if (!b.auto) r.custom = true; save(); }
+      send(res, 200, { ok: true, hour: r && r.hour != null ? r.hour : null }); return true;
     }
     if (req.method === 'POST' && url.pathname === '/api/push/off') { delete db.push[me.id]; save(); send(res, 200, { ok: true }); return true; }
     if (req.method === 'POST' && url.pathname === '/api/push/test') {
