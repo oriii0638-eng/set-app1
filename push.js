@@ -71,9 +71,12 @@ module.exports = function (db, save, send, readBody, userFor) {
   }
   function parse(k) { try { return JSON.parse(db.docs[k].json); } catch (e) { return null; } }
   function todays(uid, d) {
-    const co = parse('coach/' + uid); if (!co || co.rejected || !Array.isArray(co.sched)) return null;
-    const en = co.sched.filter(e => e.d === d)[0]; if (!en) return null;
-    const tr = parse('trainees/' + uid);
+    const co = parse('coach/' + uid), tr = parse('trainees/' + uid);
+    let sched = null;
+    if (co && !co.rejected && Array.isArray(co.sched)) sched = co.sched;
+    else if (tr && tr.ai && Array.isArray(tr.sched)) sched = tr.sched;   // אימונים אוטומטיים בלי מאמן
+    if (!sched) return null;
+    const en = sched.filter(e => e.d === d)[0]; if (!en) return null;
     if (tr && (tr.sessions || []).some(s => s.sk === d)) return null;
     return { name: en.prog && en.prog.name ? en.prog.name : '' };
   }
