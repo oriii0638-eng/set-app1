@@ -5,7 +5,7 @@ const MAX_FILE = 80 * 1024 * 1024, MAX_PER_COACH = 400 * 1024 * 1024;
 const TYPES = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/x-m4v': 'mp4', 'video/3gpp': '3gp' };
 const MIME = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', '3gp': 'video/3gpp' };
 
-module.exports = function (db, save, send, userFor, dataFile) {
+module.exports = function (db, save, send, userFor, dataFile, canWatch) {
   const DIR = path.join(path.dirname(dataFile), 'videos');
   fs.mkdirSync(DIR, { recursive: true });
   db.videos = db.videos || {};
@@ -52,6 +52,7 @@ module.exports = function (db, save, send, userFor, dataFile) {
     const m = /^\/api\/video\/([a-f0-9]{24})$/.exec(url.pathname);
     if (req.method === 'GET' && m) {
       const v = db.videos[m[1]]; if (!v) { send(res, 404, { error: 'nf' }); return true; }
+      if (canWatch && !canWatch(me, v)) { send(res, 403, { error: 'forbidden' }); return true; }
       let st; try { st = fs.statSync(fileOf(v)); } catch (e) { send(res, 404, { error: 'nf' }); return true; }
       const h = { 'Content-Type': MIME[v.ext] || 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff' };
       const r = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
