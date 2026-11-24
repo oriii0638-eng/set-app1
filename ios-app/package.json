@@ -1,0 +1,23 @@
+{
+  "name": "set-ios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "עטיפת iOS (Capacitor) לאפליקציית סט",
+  "scripts": {
+    "add:ios": "npx cap add ios",
+    "assets": "npx capacitor-assets generate --ios",
+    "sync": "npx cap sync ios",
+    "open": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/push-notifications": "^8.0.0",
+    "@capacitor/splash-screen": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.0.0"
+  }
+}

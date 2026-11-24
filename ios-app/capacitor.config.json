@@ -1,0 +1,18 @@
+{
+  "appId": "com.setapp.workout",
+  "appName": "סט",
+  "webDir": "www",
+  "server": {
+    "url": "https://set-app-e0r6.onrender.com",
+    "cleartext": false,
+    "allowNavigation": ["set-app-e0r6.onrender.com"]
+  },
+  "ios": {
+    "contentInset": "always",
+    "scrollEnabled": true,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SplashScreen": { "launchAutoHide": true, "backgroundColor": "#F3EBDA" }
+  }
+}
