@@ -40,7 +40,7 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
         else rows = [me.id].concat(friendsOf(me.id)).filter(id => byId(id)).map(id => ({ id, name: id === me.id ? nick(me) : byId(id).name, value: valueOf(kind, db.social[id]) }));
         rank(rows);
         const mine = rows.find(x => x.id === me.id);
-        send(res, 200, { rows: rows.slice(0, 20).map(x => ({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id })), me: mine ? { rank: mine.rank, value: mine.value } : null, total: rows.length }); return true;
+        send(res, 200, { rows: rows.slice(0, 100).map(x => ({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id })), me: mine ? { rank: mine.rank, value: mine.value } : null, total: rows.length }); return true;
       }
       if (req.method === 'GET' && p === '/api/friends') {
         const out = { friends: [], incoming: [], outgoing: [], me: { name: me.name, join: !!(db.social[me.id] && db.social[me.id].join), nick: nick(me), stats: (db.social[me.id] || {}).stats || null } };
@@ -57,6 +57,8 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
       const b = await readBody(req);
       if (p === '/api/social/me') {
         const s = db.social[me.id] = db.social[me.id] || {};
+        if (b.join && !s.join && b.consent !== true) { send(res, 400, { error: 'נדרש אישור השתתפות והצגת שם' }); return true; }
+        if (b.join && !s.join) s.consentAt = Date.now();
         s.join = !!b.join;
         let n = String(b.nick == null ? (s.nick || '') : b.nick).replace(/[<>\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
         s.nick = n.length >= 2 ? n : '';
