@@ -26,6 +26,12 @@ npm run assets || echo "(לא הצליח ליצור נכסים, אפשר להמ�
 echo "== סנכרון =="
 npx cap sync ios
 
+# הרשאת Face ID ב-Info.plist אם חסרה
+PL=ios/App/App/Info.plist
+if [ -f "$PL" ] && ! grep -q NSFaceIDUsageDescription "$PL"; then
+  /usr/libexec/PlistBuddy -c "Add :NSFaceIDUsageDescription string כניסה מהירה לחשבון" "$PL" || true
+fi
+
 cat <<'MSG'
 
 == מוכן. עכשיו ב-Xcode (ייפתח עוד רגע) ==
