@@ -19,6 +19,12 @@ if [ ! -d ios ]; then
 else
   echo "== תיקיית ios כבר קיימת, מדלג על היצירה =="
 fi
+for K in "NSHealthShareUsageDescription:קריאת משקל ונתוני אימון כדי להציג את ההתקדמות שלך" "NSHealthUpdateUsageDescription:רישום משקל חדש שתשמור באפליקציה"; do
+  KEY="${K%%:*}"; VAL="${K#*:}"
+  if [ -f "$PL" ] && ! grep -q "$KEY" "$PL"; then
+    /usr/libexec/PlistBuddy -c "Add :$KEY string $VAL" "$PL" || true
+  fi
+done
 
 echo "== אייקון ומסך פתיחה =="
 npm run assets || echo "(לא הצליח ליצור נכסים, אפשר להמשיך ולהוסיף ידנית ב-Xcode)"
@@ -39,7 +45,7 @@ cat <<'MSG'
 2. Signing & Capabilities:
    - Team: בחר את חשבון המפתח שלך.
    - Bundle Identifier: com.setapp.workout
-   - לחץ "+ Capability" והוסף "In-App Purchase".
+   - לחץ "+ Capability" והוסף "In-App Purchase" (ובחשבון בתשלום גם "HealthKit").
 3. הרץ על סימולטור (Play) ואחר כך על אייפון אמיתי.
 4. לבדיקת תשלום: ב-App Store Connect צור Sandbox Tester, והתחבר איתו
    בהגדרות האייפון > App Store > Sandbox Account. לא מחייב כסף.
