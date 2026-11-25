@@ -13,6 +13,6 @@
     "limitsNavigationsToAppBoundDomains": false
   },
   "plugins": {
-    "SplashScreen": { "launchAutoHide": true, "backgroundColor": "#F3EBDA" }
+    "SplashScreen": { "launchAutoHide": true, "backgroundColor": "#000000" }
   }
 }
