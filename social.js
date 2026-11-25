@@ -16,6 +16,7 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
     const st = s.stats, c = il();
     if (kind === 'streak') return Date.now() - st.t > 72 * 3600e3 ? 0 : st.streak;
     if (kind === 'week') return st.ws === c.ws ? st.wk : 0;
+    if (kind === 'steps') return st.ws === c.ws ? (st.sn || 0) : 0;
     return st.mo === c.mo ? st.moN : 0;
   }
   const nick = u => (db.social[u.id] && db.social[u.id].nick) || u.name;
@@ -33,7 +34,7 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
     const me = userFor(req); if (!me) { send(res, 401, { error: 'login' }); return true; }
     try {
       if (req.method === 'GET' && p === '/api/social/board') {
-        const kind = ['streak', 'week', 'month'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'streak';
+        const kind = ['streak', 'week', 'month', 'steps'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'streak';
         const scope = url.searchParams.get('scope') === 'friends' ? 'friends' : 'all';
         let rows;
         if (scope === 'all') rows = Object.keys(db.social).filter(id => db.social[id].join && byId(id)).map(id => ({ id, name: nick(byId(id)), value: valueOf(kind, db.social[id]) }));
@@ -48,7 +49,7 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
           const e = db.edges[k]; if (e.a !== me.id && e.b !== me.id) return;
           const oid = e.a === me.id ? e.b : e.a, o = byId(oid); if (!o) return;
           const st = (db.social[oid] || {}).stats;
-          if (e.st === 'ok') out.friends.push({ id: k, name: o.name, streak: valueOf('streak', db.social[oid]), week: valueOf('week', db.social[oid]), month: valueOf('month', db.social[oid]), has: !!st });
+          if (e.st === 'ok') out.friends.push({ id: k, name: o.name, streak: valueOf('streak', db.social[oid]), week: valueOf('week', db.social[oid]), steps: valueOf('steps', db.social[oid]), month: valueOf('month', db.social[oid]), has: !!st });
           else if (e.a === me.id) out.outgoing.push({ id: k, name: o.name }); else out.incoming.push({ id: k, name: o.name });
         });
         send(res, 200, out); return true;
@@ -66,7 +67,9 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
       }
       if (p === '/api/social/stats') {
         const s = db.social[me.id] = db.social[me.id] || {};
-        s.stats = { streak: int(b.streak), best: int(b.best), wk: int(b.wk, 50), ws: int(b.ws, 99999), mo: String(b.mo || '').slice(0, 7), moN: int(b.moN, 400), t: Date.now() };
+        const prev = s.stats, ws = int(b.ws, 99999);
+        const sn = b.steps !== undefined && b.steps !== null ? int(b.steps, 500000) : (prev && prev.ws === ws ? prev.sn || 0 : 0);
+        s.stats = { streak: int(b.streak), best: int(b.best), wk: int(b.wk, 50), ws, mo: String(b.mo || '').slice(0, 7), moN: int(b.moN, 400), sn, t: Date.now() };
         save(); send(res, 200, { ok: true }); return true;
       }
       if (p === '/api/friends/request') {
