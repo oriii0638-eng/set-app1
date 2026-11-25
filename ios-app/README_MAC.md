@@ -5,7 +5,7 @@
 
 ## לפני המאק (לעשות עכשיו)
 1. לפתוח חשבון Apple Developer Program (99 דולר לשנה), סוג Individual: https://developer.apple.com/programs/enroll/
-2. להחליט על שם החבילה (Bundle ID) יחודי, למשל `com.שמך.set`, ולעדכן ב-`capacitor.config.json` (שדה appId). אי אפשר לשנות אחרי שהאפליקציה נוצרה בחנות.
+2. שם החבילה (Bundle ID) נקבע: `com.setapp.workout` (כבר מוגדר ב-`capacitor.config.json`, שדה appId). אי אפשר לשנות אותו אחרי העלאה ל-App Store.
 3. לוודא שכתובת מדיניות הפרטיות עובדת: https://set-app-e0r6.onrender.com/privacy
 
 ## על המאק
