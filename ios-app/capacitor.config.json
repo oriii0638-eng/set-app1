@@ -19,6 +19,13 @@
     "SplashScreen": {
       "launchAutoHide": true,
       "backgroundColor": "#000000"
+    },
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     }
   },
   "appendUserAgent": "SetHK/1 SetSIWA/1 SetEdge/1"
