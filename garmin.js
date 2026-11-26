@@ -63,10 +63,17 @@ module.exports = function (db, save, send, userFor) {
       const day = s.calendarDate || (s.startTimeInSeconds ? new Date((s.startTimeInSeconds + (s.startTimeOffsetInSeconds || 0)) * 1000).toISOString().slice(0, 10) : null);
       if (!day) return;
       const box = db.gdata[uid] = db.gdata[uid] || {}, rec = box[day] = box[day] || {};
-      Object.keys(s).forEach(k => {
+      if (type === 'acts') {   // אימונים שנרשמו בשעון (ריצה, הליכה, אופניים, כוח...)
+        const a = { id: s.summaryId || s.activityId, n: s.activityName || s.activityType || '', type: s.activityType || '', dur: s.durationInSeconds || 0, kcal: s.activeKilocalories || 0, hr: s.averageHeartRateInBeatsPerMinute || 0, dist: s.distanceInMeters || 0, t: s.startTimeInSeconds || 0 };
+        rec.acts = (rec.acts || []).filter(x => x.id !== a.id).concat([a]).slice(-12);
+      } else Object.keys(s).forEach(k => {
         const v = s[k];
         if (typeof v === 'number') rec[type + '.' + k] = v;
         else if (v && typeof v === 'object' && typeof v.value === 'number') rec[type + '.' + k] = v.value;
+        else if (v && typeof v === 'object' && !Array.isArray(v)) {   // מפה של ערכים לאורך היום (חמצן, נשימה...) → ממוצע
+          const vals = Object.keys(v).map(x => v[x]).filter(x => typeof x === 'number');
+          if (vals.length > 2) rec[type + '.' + k + '.avg'] = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10;
+        }
       });
       if (type === 'stress' && s.timeOffsetBodyBatteryValues) {
         const vals = Object.keys(s.timeOffsetBodyBatteryValues).sort((a, b) => a - b).map(k => s.timeOffsetBodyBatteryValues[k]).filter(x => typeof x === 'number');
@@ -78,7 +85,7 @@ module.exports = function (db, save, send, userFor) {
     if (n) save();
     return n;
   }
-  const PUSH_TYPES = { dailies: 'daily', sleeps: 'sleep', hrv: 'hrv', stressDetails: 'stress', userMetrics: 'metrics', bodyComps: 'body', pulseox: 'spo2', respiration: 'resp', healthSnapshot: 'snap', skinTemp: 'skin' };
+  const PUSH_TYPES = { dailies: 'daily', sleeps: 'sleep', hrv: 'hrv', stressDetails: 'stress', userMetrics: 'metrics', bodyComps: 'body', pulseox: 'spo2', pulseOx: 'spo2', respiration: 'resp', allDayRespiration: 'resp', healthSnapshot: 'snap', skinTemp: 'skin', bloodPressures: 'bp', activities: 'acts', manuallyUpdatedActivities: 'acts' };
 
   return async function handle(req0, res, url) {
     const p = url.pathname;
@@ -90,6 +97,7 @@ module.exports = function (db, save, send, userFor) {
       if (!b || typeof b !== 'object') return true;
       Object.keys(b).forEach(k => {
         if (PUSH_TYPES[k]) store(PUSH_TYPES[k], b[k]);
+        else if (Array.isArray(b[k]) && b[k][0] && b[k][0].userId && !/deregistrations|userPermissionsChange/.test(k)) store(k.slice(0, 12), b[k]);   // סוג חדש: שומרים גם אותו
         else if (k === 'deregistrations') (b[k] || []).forEach(x => { const uid = uidOfG(x.userId); if (uid) { delete db.garmin[uid]; delete db.gdata[uid]; save(); } });
         else if (k === 'userPermissionsChange') (b[k] || []).forEach(x => { const uid = uidOfG(x.userId); if (uid) { db.garmin[uid].perms = x.permissions || []; save(); } });
       });
