@@ -611,6 +611,7 @@ const STATIC = { '/terms': ['text/html; charset=utf-8', 'terms.html'], '/terms.h
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
+    if (req.method === 'GET' && /^\/press\/[1-6]_[a-z]+\.jpg$/.test(url.pathname)) { const f = path.join(__dirname, 'static', 'press', path.basename(url.pathname)); if (fs.existsSync(f)) return send(res, 200, fs.readFileSync(f), { 'Content-Type': 'image/jpeg', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' }); }
     if (req.method === 'GET' && STATIC[url.pathname]) return send(res, 200, fs.readFileSync(path.join(__dirname, 'static', STATIC[url.pathname][1])), { 'Content-Type': STATIC[url.pathname][0], 'Cache-Control': 'no-cache' });
     if (url.pathname.startsWith('/api/push') && await pushHandle(req, res, url)) return;
     if (await socialHandle(req, res, url)) return;
