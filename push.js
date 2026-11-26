@@ -43,6 +43,9 @@ module.exports = function (db, save, send, readBody, userFor) {
     kid: process.env.APNS_KEY_ID || '', team: process.env.APNS_TEAM_ID || '7FJYSD96DH', topic: process.env.APNS_TOPIC || 'com.setapp.workout'
   };
   APNS.on = !!(APNS.key && APNS.kid);
+  if (APNS.key && !/BEGIN PRIVATE KEY/.test(APNS.key) && /^[A-Za-z0-9+/=\s]+$/.test(APNS.key)) APNS.key = '-----BEGIN PRIVATE KEY-----\n' + APNS.key.replace(/\s+/g, '') + '\n-----END PRIVATE KEY-----';
+  if (APNS.on) { try { crypto.createPrivateKey(APNS.key); console.log('[push] APNs key OK (' + APNS.kid + ')'); } catch (e) { APNS.on = false; console.log('[push] APNs key invalid: ' + e.message); } }
+  else console.log('[push] APNs not configured');
   let apnsJwt = null, apnsJwtT = 0;
   function apnsToken() {
     if (apnsJwt && Date.now() - apnsJwtT < 40 * 60e3) return apnsJwt;
