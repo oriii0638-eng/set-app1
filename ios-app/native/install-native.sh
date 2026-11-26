@@ -25,6 +25,11 @@ echo "== מחבר את הפלאגין לאפליקציה =="
 SB="$A/App/Base.lproj/Main.storyboard"
 perl -pi -e 's/customClass="CAPBridgeViewController" customModule="Capacitor"/customClass="SetBridgeViewController" customModule="App" customModuleProvider="target"/' "$SB"
 grep -q SetBridgeViewController "$SB" && echo "   ✓ מסך ראשי" || { echo "   ! לא הצלחתי לעדכן את Main.storyboard"; exit 1; }
+SD="$A/App/SceneDelegate.swift"
+if [ -f "$SD" ]; then
+  perl -pi -e 's/rootViewController = CAPBridgeViewController\(\)/rootViewController = SetBridgeViewController()/' "$SD"
+  grep -q "SetBridgeViewController()" "$SD" && echo "   ✓ SceneDelegate" || echo "   ! לא נמצא CAPBridgeViewController ב-SceneDelegate"
+fi
 AD="$A/App/AppDelegate.swift"
 if ! grep -q capacitorDidRegisterForRemoteNotifications "$AD"; then
   perl -0pi -e 's/\n\}\s*$/\n\n    \/\/ התראות מ-Apple: מעביר את הטוקן לפלאגין ההתראות\n    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {\n        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)\n    }\n\n    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {\n        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)\n    }\n}\n/' "$AD"
