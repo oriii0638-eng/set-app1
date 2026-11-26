@@ -34,7 +34,8 @@ if [ ! -f "$ENT" ]; then
 fi
 /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" "$ENT" >/dev/null 2>&1 || /usr/libexec/PlistBuddy -c "Add :com.apple.developer.healthkit bool true" "$ENT"
 /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit.access" "$ENT" >/dev/null 2>&1 || /usr/libexec/PlistBuddy -c "Add :com.apple.developer.healthkit.access array" "$ENT"
-echo "   ✓ Team: $TEAM | HealthKit נוסף ל-$ENT"
+/usr/libexec/PlistBuddy -c "Print :com.apple.developer.applesignin" "$ENT" >/dev/null 2>&1 || { /usr/libexec/PlistBuddy -c "Add :com.apple.developer.applesignin array" "$ENT"; /usr/libexec/PlistBuddy -c "Add :com.apple.developer.applesignin:0 string Default" "$ENT"; }
+echo "   ✓ Team: $TEAM | HealthKit + Sign in with Apple נוספו ל-$ENT"
 
 echo "== בנייה (Archive), Build $BUILD. לוקח כמה דקות =="
 rm -rf "$ARCH" "$OUT"
