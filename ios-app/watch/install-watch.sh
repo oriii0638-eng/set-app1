@@ -12,13 +12,16 @@ sleep 2
 
 echo "== כלי לעריכת פרויקט Xcode (פעם ראשונה לוקח כמה דקות) =="
 RUBY=""
-for r in /opt/homebrew/opt/ruby/bin/ruby /usr/local/opt/ruby/bin/ruby; do [ -x "$r" ] && RUBY="$r" && break; done
-if [ -z "$RUBY" ]; then
-  command -v brew >/dev/null || { echo "לא נמצא Homebrew. להתקין מ-https://brew.sh ולהריץ שוב"; exit 1; }
-  brew install ruby
-  for r in /opt/homebrew/opt/ruby/bin/ruby /usr/local/opt/ruby/bin/ruby; do [ -x "$r" ] && RUBY="$r" && break; done
+for r in /opt/homebrew/opt/ruby/bin/ruby /usr/local/opt/ruby/bin/ruby /usr/bin/ruby; do [ -x "$r" ] && RUBY="$r" && break; done
+[ -n "$RUBY" ] || { echo "לא נמצא Ruby במחשב. לשלוח צילום מסך"; exit 1; }
+if ! "$RUBY" -e 'require "xcodeproj"' 2>/dev/null; then
+  if [ "$RUBY" = /usr/bin/ruby ]; then
+    /usr/bin/gem install --user-install --no-document xcodeproj -v 1.27.0
+  else
+    "$(dirname "$RUBY")/gem" install --no-document xcodeproj
+  fi
 fi
-"$RUBY" -e 'require "xcodeproj"' 2>/dev/null || "$(dirname "$RUBY")/gem" install xcodeproj --no-document
+"$RUBY" -e 'require "xcodeproj"' || { echo "ההתקנה של xcodeproj לא הצליחה. לשלוח צילום מסך"; exit 1; }
 echo "   ✓ מוכן"
 
 echo "== מעתיק את קבצי השעון =="
