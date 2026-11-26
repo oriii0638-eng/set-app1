@@ -27,7 +27,8 @@ module.exports = function (db, save, send, userFor) {
   }
   const form = o => Object.keys(o).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(o[k])).join('&');
   async function tokenReq(fields) {
-    const r = await req('POST', 'https://connectapi.garmin.com/di-oauth2-service/oauth/token', { body: form(Object.assign({ client_id: CID, client_secret: CSEC }, fields)), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+    const r = await req('POST', 'https://diauth.garmin.com/di-oauth2-service/oauth/token', { body: form(Object.assign({ client_id: CID, client_secret: CSEC }, fields)), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+    if (!(r.code === 200 && r.j && r.j.access_token)) console.log('[garmin] token ' + fields.grant_type + ' failed: ' + r.code + ' ' + String(r.raw || '').slice(0, 200).replace(/[A-Za-z0-9_-]{30,}/g, '…'));
     return r.code === 200 && r.j && r.j.access_token ? r.j : null;
   }
   async function accessFor(uid) {
@@ -103,7 +104,7 @@ module.exports = function (db, save, send, userFor) {
       const t = await tokenReq({ grant_type: 'authorization_code', code, code_verifier: x.ver, redirect_uri: REDIRECT });
       if (!t) { page(res, 'החיבור לא הושלם', 'גרמין לא אישרה את החיבור. נסה שוב בעוד רגע.', false); return true; }
       const idr = await req('GET', 'https://apis.garmin.com/wellness-api/rest/user/id', { headers: { Authorization: 'Bearer ' + t.access_token } });
-      const gid = idr.j && idr.j.userId; if (!gid) { page(res, 'החיבור לא הושלם', 'לא הצלחנו לזהות את חשבון הגרמין.', false); return true; }
+      const gid = idr.j && idr.j.userId; if (!gid) console.log('[garmin] user id failed: ' + idr.code + ' ' + String(idr.raw || '').slice(0, 200)); if (!gid) { page(res, 'החיבור לא הושלם', 'לא הצלחנו לזהות את חשבון הגרמין.', false); return true; }
       const pr = await req('GET', 'https://apis.garmin.com/wellness-api/rest/user/permissions', { headers: { Authorization: 'Bearer ' + t.access_token } });
       Object.keys(db.garmin).forEach(u => { if (db.garmin[u].gid === gid && u !== x.uid) delete db.garmin[u]; });   // אותו גרמין עבר משתמש
       db.garmin[x.uid] = { gid, at: t.access_token, rt: t.refresh_token, exp: Date.now() + (t.expires_in || 86400) * 1000, rexp: Date.now() + (t.refresh_token_expires_in || 7776000) * 1000, perms: Array.isArray(pr.j) ? pr.j : [], t: Date.now() };
