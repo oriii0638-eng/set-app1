@@ -41,7 +41,7 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
         else rows = [me.id].concat(friendsOf(me.id)).filter(id => byId(id)).map(id => ({ id, name: id === me.id ? nick(me) : byId(id).name, value: valueOf(kind, db.social[id]) }));
         rank(rows);
         const mine = rows.find(x => x.id === me.id);
-        send(res, 200, { rows: rows.slice(0, 100).map(x => ({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id })), me: mine ? { rank: mine.rank, value: mine.value } : null, total: rows.length }); return true;
+        send(res, 200, { rows: rows.slice(0, 5).map(x => ({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id })), me: mine ? { rank: mine.rank, value: mine.value } : null, total: rows.length }); return true;
       }
       if (req.method === 'GET' && p === '/api/friends') {
         const out = { friends: [], incoming: [], outgoing: [], me: { name: me.name, join: !!(db.social[me.id] && db.social[me.id].join), nick: nick(me), stats: (db.social[me.id] || {}).stats || null } };
