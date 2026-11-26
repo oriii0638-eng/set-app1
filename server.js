@@ -765,6 +765,11 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/anim/') && await animHandle(req, res, url)) return;
     if (url.pathname.startsWith('/api/iap/') && await iapHandle(req, res, url)) return;
     if (url.pathname === '/healthz') return send(res, 200, 'ok');
+    // מאפשר כניסה עם Face ID (Passkeys) גם מתוך אפליקציית האייפון
+    if (url.pathname === '/.well-known/apple-app-site-association' || url.pathname === '/apple-app-site-association') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' });
+      return res.end(JSON.stringify({ webcredentials: { apps: ['7FJYSD96DH.com.setapp.workout'] } }));
+    }
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     if (req.method !== 'GET') return send(res, 405, 'x');
     if (url.pathname === '/' || url.pathname === '/index.html') {
