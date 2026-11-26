@@ -754,7 +754,7 @@ const animHandle = require('./anim.js')(send, userFor, DATA_FILE);
 const garminHandle = require('./garmin.js')(db, save, send, userFor);
 const iapMod = require('./iap.js');
 const iapHandle = iapMod(db, save, send, userFor, readBody);
-const STATIC = { '/terms': ['text/html; charset=utf-8', 'terms.html'], '/terms.html': ['text/html; charset=utf-8', 'terms.html'], '/privacy': ['text/html; charset=utf-8', 'privacy.html'], '/privacy.html': ['text/html; charset=utf-8', 'privacy.html'], '/sw.js': ['application/javascript; charset=utf-8', 'sw.js'], '/manifest.webmanifest': ['application/manifest+json; charset=utf-8', 'manifest.webmanifest'], '/icon-192.png': ['image/png', 'icon-192.png'], '/icon-512.png': ['image/png', 'icon-512.png'] };
+const STATIC = { '/terms': ['text/html; charset=utf-8', 'terms.html'], '/terms.html': ['text/html; charset=utf-8', 'terms.html'], '/privacy': ['text/html; charset=utf-8', 'privacy.html'], '/privacy.html': ['text/html; charset=utf-8', 'privacy.html'], '/sw.js': ['application/javascript; charset=utf-8', 'sw.js'], '/manifest.webmanifest': ['application/manifest+json; charset=utf-8', 'manifest.webmanifest'], '/icon-192.png': ['image/png', 'icon-192.png'], '/icon-300.png': ['image/png', 'icon-300.png'], '/icon-512.png': ['image/png', 'icon-512.png'] };
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
