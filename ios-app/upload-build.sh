@@ -25,11 +25,16 @@ echo "   ✓ הרשאות נוספו"
 
 cd ios/App
 echo "== הגדרות חתימה =="
-SETTINGS=$(xcodebuild -project App.xcodeproj -scheme App -configuration Release -showBuildSettings 2>/dev/null || true)
+SETTINGS=$(xcodebuild -project App.xcodeproj -target App -configuration Release -showBuildSettings 2>/dev/null || true)
 TEAM=$(echo "$SETTINGS" | awk -F' = ' '/ DEVELOPMENT_TEAM =/{print $2; exit}')
 ENT=$(echo "$SETTINGS" | awk -F' = ' '/ CODE_SIGN_ENTITLEMENTS =/{print $2; exit}')
 [ -n "$TEAM" ] || { echo "לא נמצא Team. ב-Xcode: Signing & Capabilities ← Team, ואז להריץ שוב"; exit 1; }
-[ -n "$ENT" ] || ENT="App/App.entitlements"
+VER=$(echo "$SETTINGS" | awk -F' = ' '/ MARKETING_VERSION =/{print $2; exit}')
+if [ -z "$ENT" ]; then
+  # קובע את קובץ ההרשאות רק ל-Target של האייפון (לא לשעון)
+  ENT="App/App.entitlements"
+  perl -pi -e 's/^(\s*)(INFOPLIST_FILE = App\/Info\.plist;)/$1CODE_SIGN_ENTITLEMENTS = App\/App.entitlements;\n$1$2/' App.xcodeproj/project.pbxproj
+fi
 if [ ! -f "$ENT" ]; then
   printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' > "$ENT"
 fi
@@ -38,12 +43,14 @@ fi
 /usr/libexec/PlistBuddy -c "Print :com.apple.developer.applesignin" "$ENT" >/dev/null 2>&1 || { /usr/libexec/PlistBuddy -c "Add :com.apple.developer.applesignin array" "$ENT"; /usr/libexec/PlistBuddy -c "Add :com.apple.developer.applesignin:0 string Default" "$ENT"; }
 echo "   ✓ Team: $TEAM | HealthKit + Sign in with Apple נוספו ל-$ENT"
 
+[ -d "SetWatch Watch App" ] && echo "   ✓ כולל את אפליקציית השעון"
+
 echo "== בנייה (Archive), Build $BUILD. לוקח כמה דקות =="
 rm -rf "$ARCH" "$OUT"
 xcodebuild -project App.xcodeproj -scheme App -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$ARCH" \
   -allowProvisioningUpdates \
-  CURRENT_PROJECT_VERSION="$BUILD" CODE_SIGN_ENTITLEMENTS="$ENT" DEVELOPMENT_TEAM="$TEAM" \
+  CURRENT_PROJECT_VERSION="$BUILD" ${VER:+MARKETING_VERSION="$VER"} DEVELOPMENT_TEAM="$TEAM" \
   archive | grep -E "error:|warning: .*entitle|ARCHIVE (SUCCEEDED|FAILED)" || true
 [ -d "$ARCH" ] || { echo "הבנייה נכשלה. לשלוח צילום של השגיאה"; exit 1; }
 
