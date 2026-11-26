@@ -5,7 +5,9 @@
   "server": {
     "url": "https://set-app-e0r6.onrender.com",
     "cleartext": false,
-    "allowNavigation": ["set-app-e0r6.onrender.com"]
+    "allowNavigation": [
+      "set-app-e0r6.onrender.com"
+    ]
   },
   "ios": {
     "contentInset": "always",
@@ -13,6 +15,10 @@
     "limitsNavigationsToAppBoundDomains": false
   },
   "plugins": {
-    "SplashScreen": { "launchAutoHide": true, "backgroundColor": "#000000" }
-  }
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#000000"
+    }
+  },
+  "appendUserAgent": "SetHK/1"
 }

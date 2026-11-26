@@ -19,6 +19,7 @@ if [ ! -d ios ]; then
 else
   echo "== תיקיית ios כבר קיימת, מדלג על היצירה =="
 fi
+PL=ios/App/App/Info.plist
 for K in "NSHealthShareUsageDescription:קריאת משקל ונתוני אימון כדי להציג את ההתקדמות שלך" "NSHealthUpdateUsageDescription:רישום משקל חדש שתשמור באפליקציה"; do
   KEY="${K%%:*}"; VAL="${K#*:}"
   if [ -f "$PL" ] && ! grep -q "$KEY" "$PL"; then
