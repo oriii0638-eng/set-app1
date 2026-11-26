@@ -1,39 +1,40 @@
 #!/bin/bash
-# מעתיק את קוד אפליקציית השעון לתוך פרויקט ה-Xcode, אחרי שה-Target נוצר ב-Xcode (ראו WATCH_README.md).
+# מוסיף את אפליקציית השעון לפרויקט ה-Xcode, הכול מהטרמינל. אפשר להריץ שוב אחרי כל עדכון של קוד השעון.
 # שימוש:  cd ~/Documents/set-app1/ios-app && git pull && bash watch/install-watch.sh
 set -e
 cd "$(dirname "$0")/.."
+[ -d ios/App/App.xcodeproj ] || { echo "לא נמצא ios/App/App.xcodeproj. להריץ קודם: bash build-on-mac.sh"; exit 1; }
 D="ios/App/SetWatch Watch App"
-PBX="ios/App/App.xcodeproj/project.pbxproj"
-[ -d "$D" ] || { echo "לא נמצאה התיקייה \"$D\". קודם ליצור ב-Xcode Target בשם SetWatch (שלב 2 בהוראות)."; exit 1; }
+
+echo "== סוגר את Xcode (כדי שלא ידרוס את השינויים) =="
+osascript -e 'quit app "Xcode"' 2>/dev/null || true
+sleep 2
+
+echo "== כלי לעריכת פרויקט Xcode (פעם ראשונה לוקח כמה דקות) =="
+RUBY=""
+for r in /opt/homebrew/opt/ruby/bin/ruby /usr/local/opt/ruby/bin/ruby; do [ -x "$r" ] && RUBY="$r" && break; done
+if [ -z "$RUBY" ]; then
+  command -v brew >/dev/null || { echo "לא נמצא Homebrew. להתקין מ-https://brew.sh ולהריץ שוב"; exit 1; }
+  brew install ruby
+  for r in /opt/homebrew/opt/ruby/bin/ruby /usr/local/opt/ruby/bin/ruby; do [ -x "$r" ] && RUBY="$r" && break; done
+fi
+"$RUBY" -e 'require "xcodeproj"' 2>/dev/null || "$(dirname "$RUBY")/gem" install xcodeproj --no-document
+echo "   ✓ מוכן"
 
 echo "== מעתיק את קבצי השעון =="
-cp watch/SetWatch/*.swift "$D/"
+mkdir -p "$D/Assets.xcassets/AppIcon.appiconset"
 rm -f "$D/ContentView.swift"
-echo "   ✓ $(ls watch/SetWatch/*.swift | wc -l | tr -d ' ') קבצים"
-
-echo "== אייקון לשעון =="
-IC="$D/Assets.xcassets/AppIcon.appiconset"
-mkdir -p "$IC"
-sips -z 1024 1024 assets/icon-only.png --out "$IC/icon-1024.png" >/dev/null
-cat > "$IC/Contents.json" <<'JSON'
+cp watch/SetWatch/*.swift watch/SetWatch/Info.plist watch/SetWatch/SetWatch.entitlements "$D/"
+echo '{"info":{"author":"xcode","version":1}}' > "$D/Assets.xcassets/Contents.json"
+sips -z 1024 1024 assets/icon-only.png --out "$D/Assets.xcassets/AppIcon.appiconset/icon-1024.png" >/dev/null
+cat > "$D/Assets.xcassets/AppIcon.appiconset/Contents.json" <<'JSON'
 {"images":[{"filename":"icon-1024.png","idiom":"universal","platform":"watchos","size":"1024x1024"}],"info":{"author":"xcode","version":1}}
 JSON
-echo "   ✓ אייקון"
+echo "   ✓ קוד, אייקון, הרשאות Health"
 
-echo "== הרשאות Health וגרסת watchOS =="
-SH="קריאת דופק וקלוריות בזמן האימון כדי להציג אותם על השעון"
-UP="שמירת אימון הכוח שביצעת בשעון ב-Apple Health"
-grep -q "INFOPLIST_KEY_NSHealthShareUsageDescription" "$PBX" || \
-  perl -0pi -e 's/(\n(\s*)INFOPLIST_KEY_WKCompanionAppBundleIdentifier = [^;]+;)/$1\n$2INFOPLIST_KEY_NSHealthShareUsageDescription = "'"$SH"'";\n$2INFOPLIST_KEY_NSHealthUpdateUsageDescription = "'"$UP"'";/g' "$PBX"
-perl -pi -e 's/INFOPLIST_KEY_CFBundleDisplayName = [^;]+;/INFOPLIST_KEY_CFBundleDisplayName = "סט";/g' "$PBX"
-perl -pi -e 's/WATCHOS_DEPLOYMENT_TARGET = [0-9.]+;/WATCHOS_DEPLOYMENT_TARGET = 10.0;/g' "$PBX"
-grep -q "INFOPLIST_KEY_NSHealthShareUsageDescription" "$PBX" && echo "   ✓ הרשאות Health" || echo "   ! לא נמצא Target של שעון בפרויקט. לבדוק שלב 2"
+echo "== מוסיף את השעון לפרויקט =="
+"$RUBY" watch/add_watch_target.rb
 
-if ! grep -q "PBXFileSystemSynchronizedRootGroup" "$PBX"; then
-  echo
-  echo "שים לב: הפרויקט בפורמט ישן, אז Xcode לא יוסיף את הקבצים לבד."
-  echo "ב-Xcode: גרור את הקבצים מהתיקייה \"$D\" (Api, AppState, Views, WorkoutManager) לקבוצה SetWatch Watch App, וסמן את ה-Target של השעון."
-fi
 echo
-echo "== סיום. ב-Xcode: בחר את הסכמה \"SetWatch Watch App\" ושעון, ולחץ ▶ כדי לבדוק =="
+echo "== סיום. פותח את Xcode =="
+open ios/App/App.xcodeproj

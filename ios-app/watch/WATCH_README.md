@@ -12,20 +12,12 @@
 2. בטלפון: פרופיל ← כרטיס **⌚ Apple Watch** ← להקליד את הקוד ← חבר.
 3. מאותו רגע הטלפון מסנכרן את אימון היום לשעון.
 
-## הוספת השעון לפרויקט (פעם אחת, על המאק)
-1. `cd ~/Documents/set-app1/ios-app && git pull`, ואז `open ios/App/App.xcworkspace` (או `App.xcodeproj` אם אין workspace).
-2. ב-Xcode, ללחוץ על **App** (הכחול, למעלה בצד שמאל). בחלונית הימנית, **Project Format**: לבחור **Xcode 16.0** או חדש יותר.
-3. **File ← New ← Target ← watchOS ← App** ← Next.
-   - Product Name: `SetWatch`
-   - לבחור **Watch App for Existing iOS App**, ובשדה Companion: **App**
-   - Interface: SwiftUI, Language: Swift. לא לסמן Tests.
-   - Finish. אם נשאל "Activate scheme?", ללחוץ Activate.
-4. לבחור את ה-Target **SetWatch Watch App** ← Signing & Capabilities:
-   - Team: החשבון שלך.
-   - **‎+ Capability ← HealthKit**.
-   - **‎+ Capability ← Background Modes**, ולסמן **Workout processing**.
-5. בטרמינל: `bash watch/install-watch.sh`
-6. ב-Xcode: לבחור למעלה את הסכמה **SetWatch Watch App** ואת השעון שלך (או סימולטור), וללחוץ ▶.
+## הוספת השעון לפרויקט (על המאק, רק מהטרמינל)
+```
+cd ~/Documents/set-app1/ios-app && git pull && bash watch/install-watch.sh
+```
+הסקריפט סוגר את Xcode, מתקין כלי לעריכת הפרויקט (בפעם הראשונה), מוסיף Target בשם "SetWatch Watch App" עם HealthKit, Workout processing ואייקון, מטמיע אותו באפליקציית האייפון, ופותח את Xcode מחדש.
+אחרי עדכון של קוד השעון מריצים את אותה פקודה שוב.
 
 מכאן `bash upload-build.sh <מספר>` בונה ומעלה את האייפון ואת השעון יחד.
 
