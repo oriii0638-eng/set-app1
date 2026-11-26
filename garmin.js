@@ -7,11 +7,11 @@ module.exports = function (db, save, send, userFor) {
   db.garmin = db.garmin || {};      // uid -> { gid, at, rt, exp, rexp, perms, t }
   db.gdata = db.gdata || {};        // uid -> { 'YYYY-MM-DD': { ...נתונים מצומצמים } }
   db.gpk = db.gpk || {};            // state -> { uid, ver, exp }
-  const CID = process.env.GARMIN_CLIENT_ID || '', CSEC = process.env.GARMIN_CLIENT_SECRET || '';
+  const CID = String(process.env.GARMIN_CLIENT_ID || '').trim(), CSEC = String(process.env.GARMIN_CLIENT_SECRET || '').trim();
   const BASE = (process.env.PUBLIC_URL || 'https://set-app-e0r6.onrender.com').replace(/\/$/, '');
   const REDIRECT = BASE + '/api/garmin/callback';
   const on = () => !!(CID && CSEC);
-  console.log(on() ? '[garmin] configured' : '[garmin] not configured');
+  console.log(on() ? '[garmin] configured (id ' + CID.length + ' chars, secret ' + CSEC.length + ' chars)' : '[garmin] not configured');
   const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const uidOfG = gid => Object.keys(db.garmin).find(u => db.garmin[u].gid === gid);
 
@@ -27,7 +27,7 @@ module.exports = function (db, save, send, userFor) {
   }
   const form = o => Object.keys(o).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(o[k])).join('&');
   async function tokenReq(fields) {
-    const r = await req('POST', 'https://diauth.garmin.com/di-oauth2-service/oauth/token', { body: form(Object.assign({ client_id: CID, client_secret: CSEC }, fields)), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+    const r = await req('POST', 'https://diauth.garmin.com/di-oauth2-service/oauth/token', { body: form(Object.assign({ client_id: CID, client_secret: CSEC }, fields)), headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: 'Basic ' + Buffer.from(CID + ':' + CSEC).toString('base64') } });
     if (!(r.code === 200 && r.j && r.j.access_token)) console.log('[garmin] token ' + fields.grant_type + ' failed: ' + r.code + ' ' + String(r.raw || '').slice(0, 200).replace(/[A-Za-z0-9_-]{30,}/g, '…'));
     return r.code === 200 && r.j && r.j.access_token ? r.j : null;
   }
