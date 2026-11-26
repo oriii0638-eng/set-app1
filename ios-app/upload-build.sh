@@ -17,9 +17,10 @@ add_key() {
     && /usr/libexec/PlistBuddy -c "Set :$1 $2" "$PL" \
     || /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$PL"
 }
-add_key NSHealthShareUsageDescription "קריאת צעדים, משקל ונתוני אימון כדי להציג את ההתקדמות שלך ולתחרות הצעדים"
+add_key NSHealthShareUsageDescription "קריאת צעדים, משקל, שינה, דופק ונתוני פעילות כדי להציג לך את נתוני הבריאות, לחשב מוכנות לאימון ולתחרות הצעדים"
 add_key NSHealthUpdateUsageDescription "רישום משקל ואימונים שתשמור באפליקציה"
 add_key NSFaceIDUsageDescription "כניסה מהירה לחשבון"
+/usr/libexec/PlistBuddy -c "Print :ITSAppUsesNonExemptEncryption" "$PL" >/dev/null 2>&1 || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PL"
 echo "   ✓ הרשאות נוספו"
 
 cd ios/App
