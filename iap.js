@@ -3,7 +3,7 @@
 // הרכישה נחתמת ע"י Apple כ-JWS. כאן מוודאים את שרשרת האישורים מול Apple Root CA - G3 (נעוץ לפי טביעת אצבע), ואת החתימה.
 const crypto = require('crypto');
 const BUNDLE = process.env.IAP_BUNDLE_ID || 'com.setapp.workout';
-const PRODUCTS = { 'com.setapp.workout.monthly': 'sub', 'com.setapp.workout.coach': 'coach' };
+const PRODUCTS = { 'com.setapp.workout.monthly': 'sub', 'com.setapp.workout.yearly': 'sub', 'com.setapp.workout.coach': 'coach' };
 // Apple Root CA - G3, SHA-256 (מתוך רשימת אישורי השורש של Apple)
 const APPLE_ROOT_FP = '63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79';
 const b64u = s => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
