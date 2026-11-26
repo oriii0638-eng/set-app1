@@ -1,6 +1,7 @@
 'use strict';
 // חברים ותחרויות: דירוג כללי (אופציונלי), דירוג חברים, בקשות חברות, חסימה ודיווח.
-module.exports = function (db, save, send, readBody, userFor, normName) {
+module.exports = function (db, save, send, readBody, userFor, normName, notify) {
+  notify = notify || (() => 0);
   db.social = db.social || {}; db.comps = db.comps || {}; db.edges = db.edges || {}; db.blocks = db.blocks || {}; db.reports = db.reports || [];
   const byId = id => Object.values(db.users).find(u => u.id === id);
   const key = (a, b) => [a, b].sort().join(':');
@@ -104,14 +105,14 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
         if ((db.blocks[o.id] || []).includes(me.id) || (db.blocks[me.id] || []).includes(o.id)) { send(res, 404, { error: 'לא נמצא משתמש בשם הזה' }); return true; }
         const k = key(me.id, o.id), e = db.edges[k];
         if (e && e.st === 'ok') { send(res, 200, { ok: true, msg: 'כבר חברים' }); return true; }
-        if (e && e.a === o.id) { e.st = 'ok'; save(); send(res, 200, { ok: true, msg: 'אתם חברים עכשיו' }); return true; }
-        if (!e) db.edges[k] = { a: me.id, b: o.id, st: 'p', t: Date.now() };
+        if (e && e.a === o.id) { e.st = 'ok'; save(); notify(o.id, { kind: 'friendok', title: 'חבר חדש 💪', body: me.name + ' אישר את בקשת החברות', url: '/', tab: 'social' }); send(res, 200, { ok: true, msg: 'אתם חברים עכשיו' }); return true; }
+        if (!e) { db.edges[k] = { a: me.id, b: o.id, st: 'p', t: Date.now() }; notify(o.id, { kind: 'friend', title: 'בקשת חברות חדשה', body: me.name + ' רוצה להיות חבר שלך בסט', url: '/', tab: 'social' }); }
         save(); send(res, 200, { ok: true, msg: 'הבקשה נשלחה ל' + o.name }); return true;
       }
       if (p === '/api/friends/respond') {
         const e = db.edges[String(b.id || '')];
         if (!e || e.st !== 'p' || e.b !== me.id) { send(res, 404, { error: 'nf' }); return true; }
-        if (b.accept) e.st = 'ok'; else delete db.edges[b.id];
+        if (b.accept) { e.st = 'ok'; notify(e.a, { kind: 'friendok', title: 'חבר חדש 💪', body: me.name + ' אישר את בקשת החברות', url: '/', tab: 'social' }); } else delete db.edges[b.id];
         save(); send(res, 200, { ok: true }); return true;
       }
       if (p === '/api/friends/remove' || p === '/api/friends/block') {
@@ -131,6 +132,7 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
         const days = [7, 14, 30].includes(Number(b.days)) ? Number(b.days) : 7, id = require('crypto').randomBytes(6).toString('hex');
         const title = String(b.title || '').replace(/[<>\u0000-\u001f]/g, '').trim().slice(0, 40) || (kind === 'workouts' ? 'מי מתאמן הכי הרבה' : ex);
         db.comps[id] = { id, owner: me.id, title, kind, ex: kind === 'workouts' ? '' : ex, start: Date.now(), end: Date.now() + days * 864e5, members: [me.id], invited: uids, created: Date.now() };
+        uids.forEach(u => notify(u, { kind: 'comp', title: 'הוזמנת לתחרות 🏆', body: me.name + ' מזמין אותך: ' + title, url: '/', tab: 'social' }));
         save(); send(res, 200, { ok: true, id }); return true;
       }
       if (p.startsWith('/api/social/comp/')) {
@@ -143,7 +145,7 @@ module.exports = function (db, save, send, readBody, userFor, normName) {
         }
         if (p === '/api/social/comp/invite') {
           if (c.owner !== me.id) { send(res, 403, { error: 'רק מי שיצר את התחרות יכול להזמין' }); return true; }
-          const fr = friendsOf(me.id);(Array.isArray(b.uids) ? b.uids : []).map(String).forEach(id => { if (fr.includes(id) && !c.members.includes(id) && !c.invited.includes(id)) c.invited.push(id); });
+          const fr = friendsOf(me.id);(Array.isArray(b.uids) ? b.uids : []).map(String).forEach(id => { if (fr.includes(id) && !c.members.includes(id) && !c.invited.includes(id)) { c.invited.push(id); notify(id, { kind: 'comp', title: 'הוזמנת לתחרות 🏆', body: me.name + ' מזמין אותך: ' + c.title, url: '/', tab: 'social' }); } });
           save(); send(res, 200, { ok: true }); return true;
         }
         if (p === '/api/social/comp/leave') {

@@ -1,6 +1,6 @@
 'use strict';
 // התראות לטלפון (Web Push) בלי תלויות חיצוניות: הצפנה לפי RFC 8291 וזיהוי VAPID.
-const crypto = require('crypto'), https = require('https');
+const crypto = require('crypto'), https = require('https'), http2 = require('http2');
 const TZ = 'Asia/Jerusalem';
 const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = s => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
@@ -36,7 +36,46 @@ module.exports = function (db, save, send, readBody, userFor) {
     const rs = Buffer.alloc(4); rs.writeUInt32BE(4096);
     return Buffer.concat([salt, rs, Buffer.from([asPub.length]), asPub, enc]);
   }
+  /* ---------- התראות לאפליקציית האייפון דרך Apple (APNs) ----------
+     משתני סביבה: APNS_KEY (תוכן קובץ ה-p8), APNS_KEY_ID, APNS_TEAM_ID, APNS_TOPIC */
+  const APNS = {
+    key: String(process.env.APNS_KEY || '').replace(/\\n/g, '\n').trim(),
+    kid: process.env.APNS_KEY_ID || '', team: process.env.APNS_TEAM_ID || '7FJYSD96DH', topic: process.env.APNS_TOPIC || 'com.setapp.workout'
+  };
+  APNS.on = !!(APNS.key && APNS.kid);
+  let apnsJwt = null, apnsJwtT = 0;
+  function apnsToken() {
+    if (apnsJwt && Date.now() - apnsJwtT < 40 * 60e3) return apnsJwt;
+    const head = b64u(JSON.stringify({ alg: 'ES256', kid: APNS.kid })), body = b64u(JSON.stringify({ iss: APNS.team, iat: Math.floor(Date.now() / 1000) }));
+    const sig = crypto.sign('sha256', Buffer.from(head + '.' + body), { key: crypto.createPrivateKey(APNS.key), dsaEncoding: 'ieee-p1363' });
+    apnsJwt = head + '.' + body + '.' + b64u(sig); apnsJwtT = Date.now(); return apnsJwt;
+  }
+  function apnsSend(host, token, payload) {
+    return new Promise(resolve => {
+      let c; try { c = http2.connect('https://' + host); } catch (e) { return resolve({ code: 0 }); }
+      c.on('error', () => resolve({ code: 0 }));
+      const body = JSON.stringify({ aps: { alert: { title: payload.title, body: payload.body }, sound: 'default', 'thread-id': payload.thread || 'set' }, url: payload.url || '/', tab: payload.tab || '' });
+      let req; try {
+        req = c.request({ ':method': 'POST', ':path': '/3/device/' + token, authorization: 'bearer ' + apnsToken(), 'apns-topic': APNS.topic, 'apns-push-type': 'alert', 'apns-priority': '10', 'content-type': 'application/json' });
+      } catch (e) { c.close(); return resolve({ code: 0 }); }
+      let code = 0, data = '';
+      req.setTimeout(15000, () => { req.close(); });
+      req.on('response', h => { code = h[':status']; });
+      req.on('data', d => { data += d; });
+      req.on('end', () => { c.close(); let reason = ''; try { reason = JSON.parse(data).reason || ''; } catch (e) {} resolve({ code, reason }); });
+      req.on('error', () => { c.close(); resolve({ code: 0 }); });
+      req.end(body);
+    });
+  }
+  async function sendApns(sub, payload) {
+    if (!APNS.on) return 0;
+    let r = await apnsSend(sub.dev ? 'api.sandbox.push.apple.com' : 'api.push.apple.com', sub.apns, payload);
+    if (r.code === 400 && r.reason === 'BadDeviceToken') { sub.dev = !sub.dev; r = await apnsSend(sub.dev ? 'api.sandbox.push.apple.com' : 'api.push.apple.com', sub.apns, payload); }
+    if (r.code === 410 || (r.code === 400 && r.reason === 'BadDeviceToken')) return 410;
+    return r.code;
+  }
   function sendPush(sub, payload) {
+    if (sub && sub.apns) return sendApns(sub, payload);
     return new Promise(resolve => {
       let body;
       try { body = encrypt(sub, JSON.stringify(payload)); } catch (e) { return resolve(0); }
@@ -103,15 +142,33 @@ module.exports = function (db, save, send, readBody, userFor) {
       rec.subs = keep; save();
     }
   }
+  /* התראה על אירוע (בקשת חברות, הזמנה לתחרות, הודעה מהמאמן). לכל היותר אחת ל-20 שניות מאותו סוג */
+  async function notify(uid, msg) {
+    const rec = db.push[uid]; if (!rec || !rec.subs || !rec.subs.length) return 0;
+    rec.nt = rec.nt || {}; const k = msg.kind || 'x';
+    if (rec.nt[k] && Date.now() - rec.nt[k] < 20000) return 0; rec.nt[k] = Date.now();
+    const keep = []; let ok = 0;
+    for (const s of rec.subs) { const code = await sendPush(s, msg); if (code >= 200 && code < 300) ok++; if (code !== 404 && code !== 410) keep.push(s); }
+    rec.subs = keep; save(); return ok;
+  }
   setInterval(() => { tick().catch(() => {}); }, 5 * 60 * 1000);
   setTimeout(() => { tick().catch(() => {}); }, 20000);
 
-  return async function handle(req, res, url) {
+  async function handle(req, res, url) {
     if (!url.pathname.startsWith('/api/push')) return false;
     const me = userFor(req); if (!me) { send(res, 401, { error: 'login' }); return true; }
     if (req.method === 'GET' && url.pathname === '/api/push/state') {
       const r = db.push[me.id];
-      send(res, 200, { key: b64u(pubRaw), on: !!(r && r.subs && r.subs.length), hour: r && r.hour != null ? r.hour : 17 }); return true;
+      send(res, 200, { key: b64u(pubRaw), on: !!(r && r.subs && r.subs.length), native: !!(r && r.subs && r.subs.some(x => x.apns)), apns: APNS.on, hour: r && r.hour != null ? r.hour : 17 }); return true;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/push/apns') {
+      const b = await readBody(req), t = String(b.token || '').replace(/[^0-9a-fA-F]/g, '');
+      if (t.length < 32 || t.length > 200) { send(res, 400, { error: 'bad' }); return true; }
+      for (const id in db.push) if (id !== me.id && db.push[id].subs) db.push[id].subs = db.push[id].subs.filter(x => x.apns !== t); // מכשיר שעבר משתמש
+      const r = db.push[me.id] = db.push[me.id] || { subs: [], hour: 17 };
+      r.subs = r.subs.filter(x => x.apns !== t).concat([{ apns: t, dev: !!b.dev }]).slice(-5);
+      if (b.hour != null && b.hour >= 6 && b.hour <= 22 && !(b.auto && r.custom)) r.hour = Math.floor(b.hour);
+      save(); send(res, 200, { ok: true, apns: APNS.on }); return true;
     }
     if (req.method === 'POST' && url.pathname === '/api/push/sub') {
       const b = await readBody(req), s = b.subscription;
@@ -133,6 +190,8 @@ module.exports = function (db, save, send, readBody, userFor) {
       send(res, 200, { sent: ok }); return true;
     }
     send(res, 404, { error: 'nf' }); return true;
-  };
+  }
+  handle.notify = notify;
+  return handle;
 };
 module.exports.encrypt = null;
