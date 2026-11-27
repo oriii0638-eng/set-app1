@@ -44,12 +44,14 @@ function apply(db, u, kind, tx) {
   u.iap = u.iap || {}; u.iap[kind] = { otid: tx.originalTransactionId, exp, env: tx.environment };
   if (tx.store === 'google') { u.iap[kind].store = 'google'; u.iap[kind].gp = tx.purchaseToken; }
 }
-module.exports = function (db, save, send, userFor, readBody, rootFp) {
+module.exports = function (db, save, send, userFor, readBody, rootFp, onPaid) {
   db.iap = db.iap || {};
+  /* מנוי בתשלום (לא תקופת ניסיון: יותר מ-20 יום קדימה) מזכה את מי שהזמין את המשתמש בחודש חינם */
+  const paidHook = (u, kind, tx) => { try { if (onPaid && kind === 'sub' && u.refBy && !u.refRewarded && Number(tx.expiresDate || 0) - Date.now() > 20 * 86400e3 && !tx.revocationDate) onPaid(u); } catch (e) {} };
   async function gpRefresh(token) {
     const tx = await gplay.verifySub(token), kind = check(tx), rec = db.iap[tx.originalTransactionId];
     const u = rec && Object.values(db.users).find(x => x.id === rec.uid);
-    if (u) { apply(db, u, kind, tx); save(); }
+    if (u) { apply(db, u, kind, tx); paidHook(u, kind, tx); save(); }
   }
   /* בלי הודעות מ-Google עדיין מתעדכנים: כל 3 שעות בודקים מנויי Google שעומדים להיגמר או נגמרו ביממה האחרונה */
   if (gplay.configured()) setInterval(async () => {
@@ -85,7 +87,7 @@ module.exports = function (db, save, send, userFor, readBody, rootFp) {
         console.log('[iap] transferred ' + tx.originalTransactionId + ' from ' + owner.uid + ' to ' + me.id);
       }
       db.iap[tx.originalTransactionId] = { uid: me.id, kind, productId: tx.productId };
-      apply(db, me, kind, tx); save();
+      apply(db, me, kind, tx); paidHook(me, kind, tx); save();
       send(res, 200, { ok: true, kind, until: kind === 'sub' ? me.subUntil : me.coachUntil }); return true;
     }
     if (url.pathname === '/api/iap/google-notify' && req.method === 'POST') {
@@ -100,7 +102,7 @@ module.exports = function (db, save, send, userFor, readBody, rootFp) {
         const b = await readBody(req), n = verifyJws(b.signedPayload, rootFp), inf = n.data && n.data.signedTransactionInfo;
         if (inf) {
           const tx = verifyJws(inf, rootFp), kind = check(tx), rec = db.iap[tx.originalTransactionId], u = rec && Object.values(db.users).find(x => x.id === rec.uid);
-          if (u) { apply(db, u, kind, tx); save(); }
+          if (u) { apply(db, u, kind, tx); paidHook(u, kind, tx); save(); }
         }
       } catch (e) { /* מחזירים 200 כדי ש-Apple לא תנסה שוב ושוב */ }
       send(res, 200, { ok: true }); return true;
