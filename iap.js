@@ -47,14 +47,24 @@ module.exports = function (db, save, send, userFor, readBody, rootFp) {
   return async function handle(req, res, url) {
     if (url.pathname === '/api/iap/verify' && req.method === 'POST') {
       const me = userFor(req); if (!me) { send(res, 401, { error: 'login' }); return true; }
-      let tx, kind;
+      let tx, kind, b = {};
       try {
-        const b = await readBody(req);
+        b = await readBody(req);
         tx = verifyJws(b.jws, rootFp); kind = check(tx);
         if (tx.appAccountToken && String(tx.appAccountToken).toUpperCase() !== tokenOf(me.id)) throw new Error('account');
-      } catch (e) { send(res, 400, { error: 'הרכישה לא אומתה' }); return true; }
+      } catch (e) { console.log('[iap] verify failed for ' + me.id + ': ' + e.message); send(res, 400, { error: 'Apple לא אישרה את הרכישה (' + e.message + ')' }); return true; }
       const owner = db.iap[tx.originalTransactionId];
-      if (owner && owner.uid !== me.id) { send(res, 409, { error: 'הרכישה הזאת כבר משויכת לחשבון אחר' }); return true; }
+      if (owner && owner.uid !== me.id) {
+        const prev = Object.values(db.users).find(x => x.id === owner.uid);
+        /* אותו Apple ID כבר משלם על מנוי שמחובר לחשבון אחר. אפשר להעביר אותו לחשבון הנוכחי, באישור המשתמש */
+        if (!b.transfer) {
+          const em = prev && prev.email ? String(prev.email).replace(/^(.).*?(@.*)$/, '$1***$2') : (prev ? prev.name : '');
+          console.log('[iap] owned by other account ' + owner.uid + ' (asked by ' + me.id + ')');
+          send(res, 409, { error: 'המנוי של ה-Apple ID הזה כבר מחובר לחשבון אחר', other: em, canTransfer: true }); return true;
+        }
+        if (prev) { if (owner.kind === 'sub') prev.subUntil = 0; else { prev.coachUntil = 0; prev.coachOk = false; } if (prev.iap) delete prev.iap[owner.kind]; }
+        console.log('[iap] transferred ' + tx.originalTransactionId + ' from ' + owner.uid + ' to ' + me.id);
+      }
       db.iap[tx.originalTransactionId] = { uid: me.id, kind, productId: tx.productId };
       apply(db, me, kind, tx); save();
       send(res, 200, { ok: true, kind, until: kind === 'sub' ? me.subUntil : me.coachUntil }); return true;
