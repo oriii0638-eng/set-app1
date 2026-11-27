@@ -5,7 +5,7 @@ set -e
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1
 command -v node >/dev/null 2>&1 || brew install node
 cd "$CI_PRIMARY_REPOSITORY_PATH/ios-app"
-npm ci --no-audit --no-fund
+npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 npx cap sync ios
 
 A=ios/App
