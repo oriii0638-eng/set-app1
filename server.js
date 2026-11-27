@@ -997,7 +997,7 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res, 404, 'not found');
   } catch (e) {
-    if (/^\/api\/ai/.test(url.pathname)) console.log('[ai] request failed ' + url.pathname + ': ' + e.message);
+    if (/^\/api\/ai/.test(req.url || '')) console.log('[ai] request failed ' + req.url + ': ' + e.message);
     send(res, e.message === 'big' ? 413 : 400, { error: e.message === 'big' ? 'התמונה גדולה מדי' : 'bad request' });
   }
 });
