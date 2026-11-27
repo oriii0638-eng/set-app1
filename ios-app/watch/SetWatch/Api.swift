@@ -38,7 +38,7 @@ enum Api {
         do { (data, resp) = try await URLSession.shared.data(for: r) }
         catch { throw ApiError(message: "אין חיבור לאינטרנט. ודא שהטלפון קרוב או שיש Wi-Fi") }
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        if code == 401 && token != nil { token = nil; throw ApiError(message: "השעון נותק מהחשבון. צריך לחבר שוב") }
+        if code == 401 && token != nil { UserDefaults.standard.set(token, forKey: "set.watch.revoked"); token = nil; throw ApiError(message: "השעון נותק מהחשבון. צריך לחבר שוב") }
         if code >= 400 {
             let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             throw ApiError(message: (j?["error"] as? String) ?? "שגיאה בחיבור לשרת")

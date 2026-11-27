@@ -2,7 +2,8 @@ import SwiftUI
 
 @main
 struct SetWatchApp: App {
-    @StateObject private var app = AppState()
+    @WKApplicationDelegateAdaptor(WatchAppDelegate.self) var delegate
+    @StateObject private var app = AppState.shared
     var body: some Scene {
         WindowGroup { RootView().environmentObject(app) }
     }

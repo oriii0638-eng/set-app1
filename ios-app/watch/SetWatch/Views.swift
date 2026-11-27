@@ -12,6 +12,7 @@ struct RootView: View {
             else { TodayView() }
         }
         .environmentObject(app.workout)
+        .environmentObject(app.counter)
         .environment(\.layoutDirection, .rightToLeft)
         .tint(Theme.accent)
     }
@@ -34,6 +35,10 @@ struct PairView: View {
         ScrollView {
             VStack(spacing: 8) {
                 Text("סט").font(.title2.bold()).foregroundStyle(Theme.accent)
+                    .onAppear { WatchSync.shared.activate() }
+                if code == nil && !busy {
+                    Text("פתח את סט באייפון. אם האפליקציה מותקנת גם כאן, השעון יתחבר לבד תוך כמה שניות.").font(.footnote).multilineTextAlignment(.center).foregroundStyle(.secondary)
+                }
                 if let code {
                     Text("הקוד שלך").font(.footnote).foregroundStyle(.secondary)
                     Text(code).font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
@@ -41,8 +46,7 @@ struct PairView: View {
                     Text("באפליקציה בטלפון: פרופיל ← Apple Watch ← הקלד את הקוד").font(.footnote).multilineTextAlignment(.center)
                     ProgressView().padding(.top, 4)
                 } else {
-                    Text("חבר את השעון לחשבון שלך כדי לראות את אימון היום").font(.footnote).multilineTextAlignment(.center)
-                    Button(busy ? "רגע..." : "התחבר") { Task { await begin() } }.disabled(busy)
+                    Button(busy ? "רגע..." : "התחבר עם קוד") { Task { await begin() } }.disabled(busy)
                 }
                 if let err { Text(err).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center) }
             }
@@ -105,6 +109,7 @@ struct TodayView: View {
 struct WorkoutView: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var hk: WorkoutManager
+    @EnvironmentObject var counter: RepCounter
     @State private var editing: Int?
     @State private var askEnd = false
 
@@ -113,11 +118,24 @@ struct WorkoutView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     stats
+                    if let note = app.phoneNote {
+                        Text(note).font(.caption2).foregroundStyle(Theme.accent)
+                            .task(id: note) { try? await Task.sleep(nanoseconds: 3_000_000_000); if app.phoneNote == note { app.phoneNote = nil } }
+                    } else if app.liveId != nil {
+                        Label("מסונכרן עם הטלפון", systemImage: "iphone").font(.caption2).foregroundStyle(.secondary)
+                    }
                     if let e = app.current {
                         Text("תרגיל \(app.idx + 1) מתוך \(app.ex.count)").font(.caption2).foregroundStyle(.secondary)
                         Text(e.name).font(.headline).lineLimit(3)
                         ForEach(e.sets.indices, id: \.self) { j in setRow(e, j) }
                         if let n = app.nextSet {
+                            if counter.enabled && counter.available && app.restEnd == nil {
+                                HStack {
+                                    Image(systemName: "waveform.path.ecg").foregroundStyle(Theme.accent)
+                                    Text(counter.reps > 0 ? "נספרו \(counter.reps) חזרות" : "סופר חזרות…").font(.caption2).monospacedDigit()
+                                    Spacer()
+                                }
+                            }
                             Button { app.markDone(n) } label: { Label("סט \(n + 1) בוצע", systemImage: "checkmark").frame(maxWidth: .infinity) }
                                 .buttonStyle(.borderedProminent)
                         }
@@ -127,6 +145,10 @@ struct WorkoutView: View {
                             Button { app.idx = min(app.ex.count - 1, app.idx + 1) } label: { Image(systemName: "chevron.left") }.disabled(app.idx >= app.ex.count - 1)
                         }
                     }
+                    Toggle(isOn: Binding(get: { counter.enabled }, set: { counter.enabled = $0; if $0 { counter.begin() } else { counter.stop() } })) {
+                        Text("ספירת חזרות אוטומטית").font(.caption2)
+                    }
+                    .padding(.top, 4)
                     Button(role: .destructive) { askEnd = true } label: { Label("סיים אימון", systemImage: "flag.checkered").frame(maxWidth: .infinity) }
                         .padding(.top, 6)
                 }
@@ -255,7 +277,7 @@ struct SummaryView: View {
                 Image(systemName: "checkmark.seal.fill").font(.largeTitle).foregroundStyle(Theme.accent)
                 Text("כל הכבוד!").font(.headline)
                 grid
-                Text(s.saved ? "האימון נשמר ביומן האימונים בטלפון" : "אין חיבור כרגע. האימון יישמר באפליקציה ברגע שיהיה חיבור")
+                Text(s.onPhone ? "האימון הסתיים בטלפון ונשמר שם. הדופק והקלוריות נשמרו ב-Apple Health" : s.saved ? "האימון נשמר ביומן האימונים בטלפון" : "אין חיבור כרגע. האימון יישמר באפליקציה ברגע שיהיה חיבור")
                     .font(.footnote).multilineTextAlignment(.center).foregroundStyle(s.saved ? .green : .orange)
                 Button("סגור") { app.closeSummary() }.buttonStyle(.borderedProminent)
             }
