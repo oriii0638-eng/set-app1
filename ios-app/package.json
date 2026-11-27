@@ -2,13 +2,17 @@
   "name": "set-ios",
   "version": "1.0.0",
   "private": true,
-  "description": "עטיפת iOS (Capacitor) לאפליקציית סט",
+  "description": "עטיפת iOS ואנדרואיד (Capacitor) לאפליקציית סט",
   "scripts": {
     "add:ios": "npx cap add ios",
     "assets": "npx capacitor-assets generate --ios",
     "sync": "npx cap sync ios",
     "open": "npx cap open ios",
-    "mac": "bash build-on-mac.sh"
+    "mac": "bash build-on-mac.sh",
+    "add:android": "npx cap add android",
+    "sync:android": "npx cap sync android",
+    "open:android": "npx cap open android",
+    "android": "bash build-android.sh"
   },
   "dependencies": {
     "@capacitor/core": "^8.0.0",
@@ -21,7 +25,8 @@
     "@capacitor/local-notifications": "^8.0.0",
     "@capgo/capacitor-health": "^8.0.0",
     "@capgo/capacitor-social-login": "^8.0.0",
-    "@capacitor-community/in-app-review": "^8.0.0"
+    "@capacitor-community/in-app-review": "^8.0.0",
+    "@capacitor/android": "^8.0.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^4.0.0",

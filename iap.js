@@ -2,6 +2,7 @@
 // גבייה דרך Apple (StoreKit 2): אימות רכישות בשרת וקבלת עדכוני חידוש.
 // הרכישה נחתמת ע"י Apple כ-JWS. כאן מוודאים את שרשרת האישורים מול Apple Root CA - G3 (נעוץ לפי טביעת אצבע), ואת החתימה.
 const crypto = require('crypto');
+const gplay = require('./gplay.js');
 const BUNDLE = process.env.IAP_BUNDLE_ID || 'com.setapp.workout';
 const PRODUCTS = { 'com.setapp.workout.monthly': 'sub', 'com.setapp.workout.yearly': 'sub', 'com.setapp.workout.coach': 'coach' };
 // Apple Root CA - G3, SHA-256 (מתוך רשימת אישורי השורש של Apple)
@@ -41,17 +42,31 @@ function apply(db, u, kind, tx) {
   if (kind === 'sub') u.subUntil = exp;
   else { u.coachUntil = exp; u.coachOk = exp > Date.now(); }
   u.iap = u.iap || {}; u.iap[kind] = { otid: tx.originalTransactionId, exp, env: tx.environment };
+  if (tx.store === 'google') { u.iap[kind].store = 'google'; u.iap[kind].gp = tx.purchaseToken; }
 }
 module.exports = function (db, save, send, userFor, readBody, rootFp) {
   db.iap = db.iap || {};
+  async function gpRefresh(token) {
+    const tx = await gplay.verifySub(token), kind = check(tx), rec = db.iap[tx.originalTransactionId];
+    const u = rec && Object.values(db.users).find(x => x.id === rec.uid);
+    if (u) { apply(db, u, kind, tx); save(); }
+  }
+  /* בלי הודעות מ-Google עדיין מתעדכנים: כל 3 שעות בודקים מנויי Google שעומדים להיגמר או נגמרו ביממה האחרונה */
+  if (gplay.configured()) setInterval(async () => {
+    const now = Date.now();
+    for (const u of Object.values(db.users)) for (const k of Object.keys(u.iap || {})) {
+      const r = u.iap[k];
+      if (r && r.store === 'google' && r.gp && r.exp < now + 12 * 3600e3 && r.exp > now - 7 * 86400e3) { try { await gpRefresh(r.gp); } catch (e) { console.log('[gplay] refresh ' + u.id + ': ' + e.message); } }
+    }
+  }, 3 * 3600e3).unref();
   return async function handle(req, res, url) {
     if (url.pathname === '/api/iap/verify' && req.method === 'POST') {
       const me = userFor(req); if (!me) { send(res, 401, { error: 'login' }); return true; }
       let tx, kind, b = {};
       try {
         b = await readBody(req);
-        tx = verifyJws(b.jws, rootFp); kind = check(tx);
-      } catch (e) { console.log('[iap] verify failed for ' + me.id + ': ' + e.message); send(res, 400, { error: 'Apple לא אישרה את הרכישה (' + e.message + ')' }); return true; }
+        tx = b.gp ? await gplay.verifySub(b.gp) : verifyJws(b.jws, rootFp); kind = check(tx);
+      } catch (e) { console.log('[iap] verify failed for ' + me.id + ': ' + e.message); send(res, 400, { error: (b.gp ? 'Google Play' : 'Apple') + ' לא אישרה את הרכישה (' + e.message + ')' }); return true; }
       let owner = db.iap[tx.originalTransactionId];
       /* הרכישה נעשתה במקור מחשבון אחר באפליקציה (appAccountToken של חשבון אחר) */
       if (!owner && tx.appAccountToken && String(tx.appAccountToken).toUpperCase() !== tokenOf(me.id)) {
@@ -64,7 +79,7 @@ module.exports = function (db, save, send, userFor, readBody, rootFp) {
         if (!b.transfer) {
           const em = prev && prev.email ? String(prev.email).replace(/^(.).*?(@.*)$/, '$1***$2') : (prev ? prev.name : '');
           console.log('[iap] owned by other account ' + owner.uid + ' (asked by ' + me.id + ')');
-          send(res, 409, { error: 'המנוי של ה-Apple ID הזה כבר מחובר לחשבון אחר', other: em, canTransfer: true }); return true;
+          send(res, 409, { error: 'המנוי של ' + (tx.store === 'google' ? 'חשבון Google Play' : 'ה-Apple ID') + ' הזה כבר מחובר לחשבון אחר', other: em, canTransfer: true, store: tx.store || 'apple' }); return true;
         }
         if (prev) { if ((owner.kind || kind) === 'sub') prev.subUntil = 0; else { prev.coachUntil = 0; prev.coachOk = false; } if (prev.iap) delete prev.iap[owner.kind || kind]; }
         console.log('[iap] transferred ' + tx.originalTransactionId + ' from ' + owner.uid + ' to ' + me.id);
@@ -72,6 +87,12 @@ module.exports = function (db, save, send, userFor, readBody, rootFp) {
       db.iap[tx.originalTransactionId] = { uid: me.id, kind, productId: tx.productId };
       apply(db, me, kind, tx); save();
       send(res, 200, { ok: true, kind, until: kind === 'sub' ? me.subUntil : me.coachUntil }); return true;
+    }
+    if (url.pathname === '/api/iap/google-notify' && req.method === 'POST') {
+      // עדכוני חידוש/ביטול מ-Google Play (Real-time developer notifications דרך Pub/Sub push).
+      // לא סומכים על תוכן ההודעה: רק לוקחים ממנה את ה-token ובודקים אותו מחדש מול Google
+      try { const b = await readBody(req), t = gplay.rtdnToken(b); if (t) await gpRefresh(t); } catch (e) { console.log('[gplay] notify: ' + e.message); }
+      send(res, 200, { ok: true }); return true;
     }
     if (url.pathname === '/api/iap/notify' && req.method === 'POST') {
       // עדכוני חידוש/ביטול מ-Apple (App Store Server Notifications V2)

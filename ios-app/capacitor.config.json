@@ -28,5 +28,11 @@
       ]
     }
   },
-  "appendUserAgent": "SetHK/1 SetSIWA/1 SetEdge/1"
+  "appendUserAgent": "SetHK/1 SetSIWA/1 SetEdge/1",
+  "android": {
+    "backgroundColor": "#0A0A0A",
+    "allowMixedContent": false,
+    "captureInput": true,
+    "appendUserAgent": "SetAnd/1"
+  }
 }
