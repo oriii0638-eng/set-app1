@@ -39,9 +39,10 @@ const OLD_SHOP = {
   'sh:2': 80, 'sh:3': 100, 'sh:4': 150, 'sh:5': 60,
 };
 // טווחי ערכים מותרים לכל חלק בדמות: g מין (ניטרלי/גבר/אישה), sk גוון עור, sp ספורט, bg רקע, fr מסגרת
-const RANGE = { g: 3, sk: 6, sp: 12, bg: 11, fr: 4 };
+const RANGE = { g: 3, sk: 6, sp: 12, bg: 11, fr: 4, x: 14 }; // x: דמות מיוחדת למפתח בלבד (0 = בלי)
 
-module.exports = function (db, save, send, readBody, userFor) {
+module.exports = function (db, save, send, readBody, userFor, isDev) {
+  isDev = isDev || (() => false);
   function cl(u) { u.cl = u.cl || {}; return u.cl; }
   function add(u, n, why) {
     u.coins = Math.max(0, (u.coins || 0) + n);
@@ -89,7 +90,7 @@ module.exports = function (db, save, send, readBody, userFor) {
       weekDone: !!(cl(u).week && cl(u).week.w === weekNum()),
       streak: cl(u).streak && cl(u).streak.last >= d - 1 ? cl(u).streak.n : 0,
       earn: Object.fromEntries(Object.keys(EARN).map(k => [k, EARN[k].add])),
-      level: lvlInfo(u),
+      level: lvlInfo(u), dev: isDev(u),
       shop: SHOP, invite: { coins: INVITE_COINS, welcome: WELCOME_COINS, earned: u.refCoins || 0 },
     };
   }
@@ -100,7 +101,8 @@ module.exports = function (db, save, send, readBody, userFor) {
     for (const k of Object.keys(RANGE)) {
       let v = Math.round(Number(av[k]) || 0);
       if (!(v >= 0 && v < RANGE[k])) v = 0;
-      if (SHOP[k + ':' + v] && !inv.includes(k + ':' + v)) v = 0; // פריט בתשלום שלא נקנה
+      if (SHOP[k + ':' + v] && !inv.includes(k + ':' + v) && !isDev(u)) v = 0; // פריט בתשלום שלא נקנה (למפתח הכול פתוח)
+      if (k === 'x' && v && !isDev(u)) v = 0; // דמויות מיוחדות רק למפתח
       out[k] = v;
     }
     return out;

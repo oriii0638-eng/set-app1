@@ -23,7 +23,7 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
   const nick = u => (db.social[u.id] && db.social[u.id].nick) || u.name;
   /* הדמות והרמה של כל משתתף, להצגה בטבלאות */
   const lvlOf = require('./coins.js').levelOf;
-  const look = id => { const u = byId(id) || {}, a = u.av || {}; return { av: { g: a.g | 0, sk: a.sk | 0, sp: a.sp | 0, bg: a.bg | 0, fr: a.fr | 0 }, lvl: u.lvl || lvlOf(u.xp || 0) }; };
+  const look = id => { const u = byId(id) || {}, a = u.av || {}; return { av: { g: a.g | 0, sk: a.sk | 0, sp: a.sp | 0, bg: a.bg | 0, fr: a.fr | 0, x: a.x | 0 }, lvl: u.lvl || lvlOf(u.xp || 0) }; };
   function rank(rows, meId) {
     rows.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
     let r = 0, prev = null;
