@@ -14,20 +14,32 @@ const EARN = {
   pr: { add: 10, perDay: 3 },
   week: { add: 50, perWeek: 1 },
 };
+// רמות: נקודות ניסיון (XP) מאימונים, כניסות יומיות ויעדים. כל עלייה ברמה נותנת מטבעות
+const XP = { workout: 100, daily: 20, week: 150, pr: 30, meal: 5, story: 10 };
+const LEVEL_NAMES = ['מתחיל', 'מתאמן', 'מתמיד', 'חזק', 'אתלט', 'מכונה', 'אלוף', 'אגדה'];
+const xpFor = L => 50 * (L - 1) * L;            // XP שצריך כדי להגיע לרמה L (רמה 2: 100, רמה 3: 300, רמה 4: 600...)
+function levelOf(xp) { let L = 1; while (xp >= xpFor(L + 1) && L < 99) L++; return L; }
+const levelReward = L => 20 + 10 * L;           // מטבעות על הגעה לרמה L
+const levelName = L => LEVEL_NAMES[Math.min(LEVEL_NAMES.length - 1, Math.floor((L - 1) / 3))];
 const STREAK_BONUS = 30;          // כל 7 ימים ברצף של כניסה
 const INVITE_COINS = 150;         // למזמין, כשהחבר מסיים אימון ראשון
 const WELCOME_COINS = 50;         // לחבר שהוזמן, באימון הראשון
 
-// מחירון החנות. פריטים שלא מופיעים כאן חינמיים
+// מחירון החנות. פריטים שלא מופיעים כאן חינמיים.
+// הדמות: אימוג'י תלת-ממדי (Fluent Emoji של מיקרוסופט, MIT). ספורט (sp), רקע (bg) ומסגרת (fr)
 const SHOP = {
-  'hat:1': 60, 'hat:2': 60, 'hat:3': 40, 'hat:4': 120, 'hat:5': 400, 'hat:6': 80,
-  'gl:1': 50, 'gl:2': 80, 'gl:3': 50,
-  'acc:1': 150, 'acc:2': 100, 'acc:3': 200, 'acc:4': 40,
-  'sh:2': 80, 'sh:3': 100, 'sh:4': 150, 'sh:5': 60,
+  'sp:5': 60, 'sp:6': 80, 'sp:7': 120, 'sp:8': 150, 'sp:9': 100, 'sp:11': 90,
   'bg:7': 70, 'bg:8': 90, 'bg:9': 250, 'bg:10': 120,
+  'fr:1': 100, 'fr:2': 300, 'fr:3': 200,
 };
-// טווחי ערכים מותרים לכל חלק בדמות
-const RANGE = { sk: 6, hs: 9, hc: 8, ey: 4, br: 3, mo: 4, fh: 4, sh: 6, sc: 8, hat: 7, gl: 4, acc: 5, bg: 11 };
+// פריטים מהדמות הקודמת (כובעים וכו') שכבר לא קיימים. מי שקנה אותם מקבל את המטבעות בחזרה
+const OLD_SHOP = {
+  'hat:1': 60, 'hat:2': 60, 'hat:3': 40, 'hat:4': 120, 'hat:5': 400, 'hat:6': 80,
+  'gl:1': 50, 'gl:2': 80, 'gl:3': 50, 'acc:1': 150, 'acc:2': 100, 'acc:3': 200, 'acc:4': 40,
+  'sh:2': 80, 'sh:3': 100, 'sh:4': 150, 'sh:5': 60,
+};
+// טווחי ערכים מותרים לכל חלק בדמות: g מין (ניטרלי/גבר/אישה), sk גוון עור, sp ספורט, bg רקע, fr מסגרת
+const RANGE = { g: 3, sk: 6, sp: 12, bg: 11, fr: 4 };
 
 module.exports = function (db, save, send, readBody, userFor) {
   function cl(u) { u.cl = u.cl || {}; return u.cl; }
@@ -48,6 +60,27 @@ module.exports = function (db, save, send, readBody, userFor) {
     return WELCOME_COINS;
   }
 
+  /* החזר על פריטים מהדמות הקודמת */
+  function refundOld(u) {
+    if (u.avRefund || !(u.inv || []).length) return;
+    let back = 0; u.inv = u.inv.filter(id => { if (OLD_SHOP[id]) { back += OLD_SHOP[id]; return false; } return true; });
+    u.avRefund = Date.now(); if (back) add(u, back, 'refund old avatar items'); save();
+  }
+
+  /* XP התחלתי למשתמשים קיימים: לפי מספר האימונים שכבר שמורים (בלי מטבעות רטרואקטיביים) */
+  function xpInit(u) {
+    if (u.xp != null) return;
+    let n = 0; try { const d = db.docs['trainees/' + u.id]; n = ((d && JSON.parse(d.json).sessions) || []).length; } catch (e) {}
+    u.xp = n * XP.workout; u.lvl = levelOf(u.xp);
+  }
+  function gainXp(u, kind) {
+    xpInit(u); const g = XP[kind] || 0; if (!g) return null;
+    u.xp += g; const L = levelOf(u.xp);
+    if (L > (u.lvl || 1)) { let coins = 0; for (let k = (u.lvl || 1) + 1; k <= L; k++) coins += levelReward(k); u.lvl = L; add(u, coins, 'level ' + L); return { level: L, coins, name: levelName(L) }; }
+    return null;
+  }
+  function lvlInfo(u) { xpInit(u); const L = u.lvl || levelOf(u.xp); return { level: L, name: levelName(L), xp: u.xp, from: xpFor(L), to: xpFor(L + 1), reward: levelReward(L + 1) }; }
+
   function status(u) {
     const d = dayNum();
     return {
@@ -56,6 +89,7 @@ module.exports = function (db, save, send, readBody, userFor) {
       weekDone: !!(cl(u).week && cl(u).week.w === weekNum()),
       streak: cl(u).streak && cl(u).streak.last >= d - 1 ? cl(u).streak.n : 0,
       earn: Object.fromEntries(Object.keys(EARN).map(k => [k, EARN[k].add])),
+      level: lvlInfo(u),
       shop: SHOP, invite: { coins: INVITE_COINS, welcome: WELCOME_COINS, earned: u.refCoins || 0 },
     };
   }
@@ -75,6 +109,7 @@ module.exports = function (db, save, send, readBody, userFor) {
   return async function handle(req, res, url) {
     if (!url.pathname.startsWith('/api/coins') && url.pathname !== '/api/avatar' && url.pathname !== '/api/shop/buy') return false;
     const u = userFor(req); if (!u) { send(res, 401, { error: 'auth' }); return true; }
+    refundOld(u);
     if (req.method === 'GET' && url.pathname === '/api/coins') { send(res, 200, status(u)); return true; }
     if (req.method === 'POST' && url.pathname === '/api/coins/claim') {
       const b = await readBody(req), kind = String(b.kind || ''), e = EARN[kind];
@@ -92,8 +127,9 @@ module.exports = function (db, save, send, readBody, userFor) {
         }
         if (kind === 'workout') welcome = inviteReward(u);
       }
+      const up = got ? gainXp(u, kind) : null;
       if (got || bonus || welcome) save();
-      send(res, 200, Object.assign(status(u), { add: got, bonus, welcome })); return true;
+      send(res, 200, Object.assign(status(u), { add: got, bonus, welcome, levelUp: up })); return true;
     }
     if (req.method === 'POST' && url.pathname === '/api/shop/buy') {
       const b = await readBody(req), id = String(b.id || ''), price = SHOP[id];
@@ -113,3 +149,5 @@ module.exports = function (db, save, send, readBody, userFor) {
   };
 };
 module.exports.SHOP = SHOP;
+module.exports.levelOf = levelOf;
+module.exports.levelName = levelName;

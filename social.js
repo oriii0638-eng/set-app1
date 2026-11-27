@@ -21,6 +21,9 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
     return st.mo === c.mo ? st.moN : 0;
   }
   const nick = u => (db.social[u.id] && db.social[u.id].nick) || u.name;
+  /* הדמות והרמה של כל משתתף, להצגה בטבלאות */
+  const lvlOf = require('./coins.js').levelOf;
+  const look = id => { const u = byId(id) || {}, a = u.av || {}; return { av: { g: a.g | 0, sk: a.sk | 0, sp: a.sp | 0, bg: a.bg | 0, fr: a.fr | 0 }, lvl: u.lvl || lvlOf(u.xp || 0) }; };
   function rank(rows, meId) {
     rows.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
     let r = 0, prev = null;
@@ -47,7 +50,7 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
     const mine = c.owner === me.id, member = c.members.includes(me.id);
     const rows = rank(c.members.filter(id => byId(id)).map(id => ({ id, name: byId(id).name, value: compVal(c, id) })));
     return { id: c.id, title: c.title, kind: c.kind, kindName: KINDS[c.kind], ex: c.ex || '', start: c.start, end: c.end, owner: (byId(c.owner) || {}).name || '', mine, status: member ? 'member' : 'invited',
-      rows: rows.map(x => ({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id })), invited: c.invited.filter(id => byId(id)).map(id => byId(id).name) };
+      rows: rows.map(x => Object.assign({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id }, look(x.id))), invited: c.invited.filter(id => byId(id)).map(id => byId(id).name) };
   }
   const friendsOf = id => Object.values(db.edges).filter(e => e.st === 'ok' && (e.a === id || e.b === id)).map(e => e.a === id ? e.b : e.a);
 
@@ -64,7 +67,7 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
         else rows = [me.id].concat(friendsOf(me.id)).filter(id => byId(id)).map(id => ({ id, name: id === me.id ? nick(me) : byId(id).name, value: valueOf(kind, db.social[id]) }));
         rank(rows);
         const mine = rows.find(x => x.id === me.id);
-        send(res, 200, { rows: rows.slice(0, 5).map(x => ({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id })), me: mine ? { rank: mine.rank, value: mine.value } : null, total: rows.length }); return true;
+        send(res, 200, { rows: rows.slice(0, 5).map(x => Object.assign({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id }, look(x.id))), me: mine ? Object.assign({ rank: mine.rank, value: mine.value }, look(me.id)) : null, total: rows.length }); return true;
       }
       if (req.method === 'GET' && p === '/api/friends') {
         const out = { friends: [], incoming: [], outgoing: [], me: { name: me.name, join: !!(db.social[me.id] && db.social[me.id].join), nick: nick(me), stats: (db.social[me.id] || {}).stats || null } };
@@ -72,7 +75,7 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
           const e = db.edges[k]; if (e.a !== me.id && e.b !== me.id) return;
           const oid = e.a === me.id ? e.b : e.a, o = byId(oid); if (!o) return;
           const st = (db.social[oid] || {}).stats;
-          if (e.st === 'ok') out.friends.push({ id: k, uid: o.id, name: o.name, streak: valueOf('streak', db.social[oid]), week: valueOf('week', db.social[oid]), steps: valueOf('steps', db.social[oid]), month: valueOf('month', db.social[oid]), has: !!st });
+          if (e.st === 'ok') out.friends.push(Object.assign({ id: k, uid: o.id, name: o.name, streak: valueOf('streak', db.social[oid]), week: valueOf('week', db.social[oid]), steps: valueOf('steps', db.social[oid]), month: valueOf('month', db.social[oid]), has: !!st }, look(o.id)));
           else if (e.a === me.id) out.outgoing.push({ id: k, name: o.name }); else out.incoming.push({ id: k, name: o.name });
         });
         send(res, 200, out); return true;
