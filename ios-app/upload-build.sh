@@ -20,6 +20,10 @@ add_key() {
 add_key NSHealthShareUsageDescription "קריאת צעדים, משקל, שינה, דופק ונתוני פעילות כדי להציג לך את נתוני הבריאות, לחשב מוכנות לאימון ולתחרות הצעדים"
 add_key NSHealthUpdateUsageDescription "רישום משקל ואימונים שתשמור באפליקציה"
 add_key NSFaceIDUsageDescription "כניסה מהירה לחשבון"
+add_key NSCameraUsageDescription "צילום הצלחת כדי לזהות את המזון ולחשב קלוריות וחלבון, וצילום תמונת פרופיל"
+add_key NSPhotoLibraryUsageDescription "בחירת תמונה של ארוחה מהגלריה כדי לחשב קלוריות וחלבון"
+add_key NSPhotoLibraryAddUsageDescription "שמירת כרטיס סיכום האימון שלך בגלריה"
+add_key NSMicrophoneUsageDescription "הקלטת וידאו של תרגיל לשליחה למאמן"
 /usr/libexec/PlistBuddy -c "Print :ITSAppUsesNonExemptEncryption" "$PL" >/dev/null 2>&1 || /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PL"
 echo "   ✓ הרשאות נוספו"
 
