@@ -269,7 +269,7 @@ function aiCall(messages, ctx, sys, maxTok) {
     const r = require(AI_URL.startsWith('https') ? 'https' : 'http').request(AI_URL, { method: 'POST', headers: { 'x-api-key': AI_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, resp => {
       const ch = []; resp.on('data', c => ch.push(c)); resp.on('end', () => { if (resp.statusCode >= 300) console.log('[ai] error ' + resp.statusCode + ': ' + Buffer.concat(ch).toString('utf8').slice(0, 300)); try { const j = JSON.parse(Buffer.concat(ch).toString('utf8')); resolve(resp.statusCode < 300 && j.content && j.content[0] ? String(j.content[0].text || '') : null); } catch (e) { resolve(null); } });
     });
-    r.on('error', e => { console.log('[ai] net error ' + e.message); resolve(null); }); r.setTimeout(30000, () => { r.destroy(); resolve(null); }); r.end(body);
+    r.on('error', e => { console.log('[ai] net error ' + e.message); resolve(null); }); r.setTimeout(45000, () => { console.log('[ai] timeout 45s'); r.destroy(); resolve(null); }); r.end(body);
   });
 }
 
@@ -846,7 +846,7 @@ async function api(req, res, url) {
     const b = await readBody(req);
     const txt = String(b.text || '').trim().slice(0, 400);
     const m = b.image ? /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(b.image)) : null;
-    if (b.image && (!m || m[2].length > 2.2e6)) return send(res, 400, { error: 'תמונה לא תקינה או גדולה מדי' });
+    if (b.image && (!m || m[2].length > 2.2e6)) { console.log('[food] bad image ' + String(b.image).slice(0, 40) + ' len ' + String(b.image).length); return send(res, 400, { error: 'תמונה לא תקינה או גדולה מדי' }); }
     if (!m && txt.length < 2) return send(res, 400, { error: 'כתוב מה אכלת או צלם את הצלחת' });
     const cost = m ? 3 : 1, day = new Date().toISOString().slice(0, 10);
     db.ai = db.ai || {};
@@ -854,9 +854,11 @@ async function api(req, res, url) {
     if (u.n + cost > AI_DAILY) return send(res, 429, { error: 'הגעת למגבלה היומית של הזיהוי החכם. נסה שוב מחר' });
     u.n += cost; save();
     const content = m ? [{ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } }, { type: 'text', text: txt ? 'הערה מהמשתמש: ' + txt : 'מה יש בצלחת?' }] : [{ type: 'text', text: 'מה שאכלתי: ' + txt }];
+    const t0 = Date.now(); console.log('[food] start ' + (m ? 'photo ' + Math.round(m[2].length / 1024) + 'KB ' + m[1] : 'text'));
     const reply = await aiCall([{ role: 'user', content }], '', AI_SYS_FOODLOG, 900);
+    console.log('[food] reply ' + (Date.now() - t0) + 'ms ' + (reply ? reply.length + ' chars' : 'EMPTY'));
     let j = null; try { const t = (reply || '').replace(/```json|```/g, ''); j = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (e) {}
-    if (!j || !Array.isArray(j.items)) { u.n -= cost; save(); return send(res, 502, { error: m ? 'לא הצלחתי לזהות את התמונה. נסה תמונה ברורה יותר, מלמעלה' : 'לא הצלחתי להבין. נסה לכתוב אחרת' }); }
+    if (!j || !Array.isArray(j.items)) { console.log('[food] bad reply: ' + String(reply || '').slice(0, 200).replace(/\n/g, ' ')); u.n -= cost; save(); return send(res, 502, { error: m ? 'לא הצלחתי לזהות את התמונה. נסה תמונה ברורה יותר, מלמעלה' : 'לא הצלחתי להבין. נסה לכתוב אחרת' }); }
     const n = (x, mx) => Math.max(0, Math.min(mx, Math.round(Number(x) || 0)));
     const items = j.items.slice(0, 12).map(x => ({ name: String(x.name || '').slice(0, 50), grams: n(x.grams, 3000), kcal: n(x.kcal, 5000), protein: n(x.protein, 400), carbs: n(x.carbs, 800), fat: n(x.fat, 400) })).filter(x => x.name);
     return send(res, 200, { items, note: String(j.note || '').slice(0, 200), src: m ? 'photo' : 'text' });
@@ -995,7 +997,8 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res, 404, 'not found');
   } catch (e) {
-    send(res, e.message === 'big' ? 413 : 400, { error: 'bad request' });
+    if (/^\/api\/ai/.test(url.pathname)) console.log('[ai] request failed ' + url.pathname + ': ' + e.message);
+    send(res, e.message === 'big' ? 413 : 400, { error: e.message === 'big' ? 'התמונה גדולה מדי' : 'bad request' });
   }
 });
 server.listen(PORT, '0.0.0.0', () => {
