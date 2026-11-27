@@ -51,9 +51,13 @@ module.exports = function (db, save, send, userFor, readBody, rootFp) {
       try {
         b = await readBody(req);
         tx = verifyJws(b.jws, rootFp); kind = check(tx);
-        if (tx.appAccountToken && String(tx.appAccountToken).toUpperCase() !== tokenOf(me.id)) throw new Error('account');
       } catch (e) { console.log('[iap] verify failed for ' + me.id + ': ' + e.message); send(res, 400, { error: 'Apple לא אישרה את הרכישה (' + e.message + ')' }); return true; }
-      const owner = db.iap[tx.originalTransactionId];
+      let owner = db.iap[tx.originalTransactionId];
+      /* הרכישה נעשתה במקור מחשבון אחר באפליקציה (appAccountToken של חשבון אחר) */
+      if (!owner && tx.appAccountToken && String(tx.appAccountToken).toUpperCase() !== tokenOf(me.id)) {
+        const t = String(tx.appAccountToken).toUpperCase(), u0 = Object.values(db.users).find(x => tokenOf(x.id) === t);
+        owner = { uid: u0 ? u0.id : '?', kind };
+      }
       if (owner && owner.uid !== me.id) {
         const prev = Object.values(db.users).find(x => x.id === owner.uid);
         /* אותו Apple ID כבר משלם על מנוי שמחובר לחשבון אחר. אפשר להעביר אותו לחשבון הנוכחי, באישור המשתמש */
@@ -62,7 +66,7 @@ module.exports = function (db, save, send, userFor, readBody, rootFp) {
           console.log('[iap] owned by other account ' + owner.uid + ' (asked by ' + me.id + ')');
           send(res, 409, { error: 'המנוי של ה-Apple ID הזה כבר מחובר לחשבון אחר', other: em, canTransfer: true }); return true;
         }
-        if (prev) { if (owner.kind === 'sub') prev.subUntil = 0; else { prev.coachUntil = 0; prev.coachOk = false; } if (prev.iap) delete prev.iap[owner.kind]; }
+        if (prev) { if ((owner.kind || kind) === 'sub') prev.subUntil = 0; else { prev.coachUntil = 0; prev.coachOk = false; } if (prev.iap) delete prev.iap[owner.kind || kind]; }
         console.log('[iap] transferred ' + tx.originalTransactionId + ' from ' + owner.uid + ' to ' + me.id);
       }
       db.iap[tx.originalTransactionId] = { uid: me.id, kind, productId: tx.productId };
