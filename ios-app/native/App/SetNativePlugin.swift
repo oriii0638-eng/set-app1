@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import HealthKit
 import WidgetKit
@@ -18,6 +19,20 @@ public class SetNativePlugin: CAPPlugin, CAPBridgedPlugin {
     ]
     static let appGroup = "group.com.setapp.workout"
     private let store = HKHealthStore()
+
+    // סגירת האפליקציה מהמסך של האפליקציות הפתוחות: מורידים את האימון ממסך הנעילה
+    override public func load() {
+        NotificationCenter.default.addObserver(self, selector: #selector(appWillTerminate), name: UIApplication.willTerminateNotification, object: nil)
+    }
+    @objc func appWillTerminate() {
+        guard #available(iOS 16.2, *) else { return }
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            for a in Activity<SetActivityAttributes>.activities { await a.end(nil, dismissalPolicy: .immediate) }
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 2)
+    }
 
     // ---------- Apple Health ----------
     @objc func saveWorkout(_ call: CAPPluginCall) {
@@ -66,7 +81,7 @@ public class SetNativePlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 _ = try Activity<SetActivityAttributes>.request(
                     attributes: SetActivityAttributes(id: id),
-                    content: ActivityContent(state: st, staleDate: nil),
+                    content: ActivityContent(state: st, staleDate: Date().addingTimeInterval(4 * 3600)),
                     pushType: nil)
                 call.resolve(["started": true])
             } catch {
@@ -81,7 +96,7 @@ public class SetNativePlugin: CAPPlugin, CAPBridgedPlugin {
         let st = state(call.getObject("content") ?? [:])
         Task {
             for a in Activity<SetActivityAttributes>.activities where a.attributes.id == id {
-                await a.update(ActivityContent(state: st, staleDate: nil))
+                await a.update(ActivityContent(state: st, staleDate: Date().addingTimeInterval(4 * 3600)))
             }
             call.resolve()
         }
