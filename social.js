@@ -23,6 +23,31 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
   const nick = u => (db.social[u.id] && db.social[u.id].nick) || u.name;
   /* הדמות והרמה של כל משתתף, להצגה בטבלאות */
   const lvlOf = require('./coins.js').levelOf;
+  /* כל התחרויות שבועיות (מתאפסות ביום ראשון). בתחילת כל שבוע, שלושת הראשונים בכל טבלה מקבלים מטבעות */
+  const weekNum = require('./coins.js').weekNum, PRIZES = [1000, 300, 100], WEEKLY = ['xp', 'week', 'steps'];
+  const xpWeek = (id, w) => { const u = byId(id); w = w == null ? weekNum() : w; return u && u.xpw && u.xpw.w === w ? u.xpw.n : 0; };
+  /* ערך של שבוע שעבר: מהנתונים הנוכחיים אם עוד לא התעדכנו, או מהעותק ששמרנו כשהתחיל שבוע חדש */
+  function lastVal(kind, id, wsLast, wnLast) {
+    if (kind === 'xp') return xpWeek(id, wnLast);
+    const s = db.social[id] || {}, st = s.stats, l = s.last;
+    const f = kind === 'week' ? 'wk' : 'sn';
+    if (st && st.ws === wsLast) return st[f] || 0;
+    if (l && l.ws === wsLast) return l[f] || 0;
+    return 0;
+  }
+  /* בהפעלה הראשונה לא משלמים על שבוע שעבר (התחרות לא הייתה קיימת אז) */
+  if (!db.wkPaid) { const w0 = weekNum() - 1; db.wkPaid = { xp: w0, week: w0, steps: w0 }; }
+  function payWeek() {
+    const wnLast = weekNum() - 1, wsLast = il().ws - 7; db.wkPaid = db.wkPaid || {};
+    let any = false;
+    WEEKLY.forEach(kind => {
+      if ((db.wkPaid[kind] || 0) >= wnLast) return;
+      const rows = rank(Object.keys(db.social).filter(id => db.social[id].join && byId(id)).map(id => ({ id, name: nick(byId(id)), value: lastVal(kind, id, wsLast, wnLast) })).filter(x => x.value > 0));
+      rows.filter(x => x.rank <= 3).forEach(x => { const u = byId(x.id), n = PRIZES[x.rank - 1]; u.coins = (u.coins || 0) + n; (u.clog = u.clog || []).push([Date.now(), n, 'week prize ' + kind + ' ' + x.rank]); (u.prizes = u.prizes || []).push({ kind, place: x.rank, coins: n, value: x.value, w: wnLast }); });
+      db.wkPaid[kind] = wnLast; any = true;
+    });
+    if (any) save();
+  }
   const look = id => { const u = byId(id) || {}, a = u.av || {}; return { av: { g: a.g | 0, sk: a.sk | 0, sp: a.sp | 0, bg: a.bg | 0, fr: a.fr | 0, x: a.x | 0 }, lvl: u.lvl || lvlOf(u.xp || 0) }; };
   function rank(rows, meId) {
     rows.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
@@ -60,11 +85,13 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
     const me = userFor(req); if (!me) { send(res, 401, { error: 'login' }); return true; }
     try {
       if (req.method === 'GET' && p === '/api/social/board') {
-        const kind = ['streak', 'week', 'month', 'steps'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'streak';
+        const kind = ['streak', 'week', 'month', 'steps', 'xp'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'streak';
+        payWeek();
+        const val = id => kind === 'xp' ? xpWeek(id) : valueOf(kind, db.social[id]);
         const scope = url.searchParams.get('scope') === 'friends' ? 'friends' : 'all';
         let rows;
-        if (scope === 'all') rows = Object.keys(db.social).filter(id => db.social[id].join && byId(id)).map(id => ({ id, name: nick(byId(id)), value: valueOf(kind, db.social[id]) }));
-        else rows = [me.id].concat(friendsOf(me.id)).filter(id => byId(id)).map(id => ({ id, name: id === me.id ? nick(me) : byId(id).name, value: valueOf(kind, db.social[id]) }));
+        if (scope === 'all') rows = Object.keys(db.social).filter(id => db.social[id].join && byId(id)).map(id => ({ id, name: nick(byId(id)), value: val(id) }));
+        else rows = [me.id].concat(friendsOf(me.id)).filter(id => byId(id)).map(id => ({ id, name: id === me.id ? nick(me) : byId(id).name, value: val(id) }));
         rank(rows);
         const mine = rows.find(x => x.id === me.id);
         send(res, 200, { rows: rows.slice(0, 5).map(x => Object.assign({ rank: x.rank, name: x.name, value: x.value, me: x.id === me.id }, look(x.id))), me: mine ? Object.assign({ rank: mine.rank, value: mine.value }, look(me.id)) : null, total: rows.length }); return true;
@@ -98,6 +125,7 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
       if (p === '/api/social/stats') {
         const s = db.social[me.id] = db.social[me.id] || {};
         const prev = s.stats, ws = int(b.ws, 99999);
+        if (prev && prev.ws !== ws && prev.ws) s.last = { ws: prev.ws, wk: prev.wk || 0, sn: prev.sn || 0 };
         const sn = b.steps !== undefined && b.steps !== null ? int(b.steps, 500000) : (prev && prev.ws === ws ? prev.sn || 0 : 0);
         s.stats = { streak: int(b.streak), best: int(b.best), wk: int(b.wk, 50), ws, mo: String(b.mo || '').slice(0, 7), moN: int(b.moN, 400), sn, t: Date.now() };
         save(); send(res, 200, { ok: true }); return true;

@@ -82,7 +82,8 @@ module.exports = function (db, save, send, readBody, userFor, isDev) {
   }
   function gainXp(u, kind) {
     xpInit(u); const g = XP[kind] || 0; if (!g) return null;
-    u.xp += g; const L = levelOf(u.xp);
+    u.xp += g; const wk = weekNum(); if (!u.xpw || u.xpw.w !== wk) u.xpw = { w: wk, n: 0 }; u.xpw.n += g;
+    const L = levelOf(u.xp);
     if (L > (u.lvl || 1)) { let coins = 0; for (let k = (u.lvl || 1) + 1; k <= L; k++) coins += levelReward(k); u.lvl = L; add(u, coins, 'level ' + L); return { level: L, coins, name: levelName(L) }; }
     return null;
   }
@@ -96,7 +97,7 @@ module.exports = function (db, save, send, readBody, userFor, isDev) {
       weekDone: !!(cl(u).week && cl(u).week.w === weekNum()),
       streak: cl(u).streak && cl(u).streak.last >= d - 1 ? cl(u).streak.n : 0,
       earn: Object.fromEntries(Object.keys(EARN).map(k => [k, EARN[k].add])),
-      level: lvlInfo(u), dev: isDev(u),
+      level: lvlInfo(u), dev: isDev(u), xpWeek: u.xpw && u.xpw.w === weekNum() ? u.xpw.n : 0, prizes: (u.prizes || []).filter(p => !p.seen),
       shop: SHOP, invite: { coins: INVITE_COINS, welcome: WELCOME_COINS, earned: u.refCoins || 0 },
     };
   }
@@ -148,6 +149,7 @@ module.exports = function (db, save, send, readBody, userFor, isDev) {
       add(u, -price, 'buy ' + id); u.inv.push(id); save();
       send(res, 200, status(u)); return true;
     }
+    if (req.method === 'POST' && url.pathname === '/api/coins/prize-seen') { (u.prizes || []).forEach(p => { p.seen = true; }); save(); send(res, 200, status(u)); return true; }
     if (req.method === 'POST' && url.pathname === '/api/avatar') {
       const b = await readBody(req), av = clean(b.av, u);
       if (!av) { send(res, 400, { error: 'x' }); return true; }
@@ -157,5 +159,6 @@ module.exports = function (db, save, send, readBody, userFor, isDev) {
   };
 };
 module.exports.SHOP = SHOP;
+module.exports.weekNum = weekNum;
 module.exports.levelOf = levelOf;
 module.exports.levelName = levelName;
