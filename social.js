@@ -79,7 +79,18 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
   }
   const friendsOf = id => Object.values(db.edges).filter(e => e.st === 'ok' && (e.a === id || e.b === id)).map(e => e.a === id ? e.b : e.a);
 
-  return async function handle(req, res, url) {
+  /* חברות אוטומטית דרך קישור הזמנה: שני הצדדים נהיים חברים מיד, אלא אם אחד חסם את השני */
+  function befriend(aId, bId) {
+    if (!aId || !bId || aId === bId) return false;
+    if ((db.blocks[aId] || []).includes(bId) || (db.blocks[bId] || []).includes(aId)) return false;
+    const k = key(aId, bId), e = db.edges[k];
+    if (e && e.st === 'ok') return 'already';
+    db.edges[k] = { a: bId, b: aId, st: 'ok', t: Date.now() }; save();
+    const u = byId(aId);
+    if (u) notify(bId, { kind: 'friendok', title: 'חבר חדש 💪', body: u.name + ' הצטרף דרך הקישור שלך ועכשיו אתם חברים', url: '/', tab: 'social' });
+    return true;
+  }
+  const handle = async function handle(req, res, url) {
     const p = url.pathname;
     if (!(p.startsWith('/api/social') || p.startsWith('/api/friends') || p === '/api/report')) return false;
     const me = userFor(req); if (!me) { send(res, 401, { error: 'login' }); return true; }
@@ -192,4 +203,6 @@ module.exports = function (db, save, send, readBody, userFor, normName, notify) 
       send(res, 404, { error: 'x' }); return true;
     } catch (e) { send(res, 400, { error: 'bad request' }); return true; }
   };
+  handle.befriend = befriend;
+  return handle;
 };
