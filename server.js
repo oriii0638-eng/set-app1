@@ -981,6 +981,8 @@ const server = http.createServer(async (req, res) => {
       const code = im[1].toUpperCase(), ru = refFind(code), pr = ru ? null : promoFind(code), r = ru || pr;
       const meI = userFor(req);
       if (meI && ru && ru.id !== meI.id) { const ok = socialHandle.befriend(meI.id, ru.id); res.writeHead(302, { Location: '/?fr=' + (ok ? '1' : '0') }); return res.end(); }
+      // בתוך האפליקציה (Universal Link) בלי חשבון: ישר להרשמה, והקוד נשמר בעוגייה כדי שתהיו חברים
+      if (!meI && ru && /SetHK\/|SetAnd\//.test(req.headers['user-agent'] || '')) { res.writeHead(302, { Location: '/login#up', 'Set-Cookie': 'sref=' + code + '; Path=/; Max-Age=' + (30 * 86400) + '; SameSite=Lax; Secure' }); return res.end(); }
       const gift = ru ? (ru.amb ? 'חודש ראשון חינם במקום שבועיים' : '') : pr ? (pr.days === 30 ? 'חודש חינם' : pr.days + ' ימים חינם') : '';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Set-Cookie': r ? 'sref=' + code + '; Path=/; Max-Age=' + (30 * 86400) + '; SameSite=Lax; Secure' : 'sref=; Path=/; Max-Age=0' });
       return res.end(inviteHtml(r ? code : '', ru && ru.name ? String(ru.name).split(/[\s_.]/)[0].slice(0, 20) : '', gift, ru ? ru.name : ''));
@@ -995,7 +997,7 @@ const server = http.createServer(async (req, res) => {
     // מאפשר כניסה עם Face ID (Passkeys) גם מתוך אפליקציית האייפון
     if (url.pathname === '/.well-known/apple-app-site-association' || url.pathname === '/apple-app-site-association') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' });
-      return res.end(JSON.stringify({ webcredentials: { apps: ['7FJYSD96DH.com.setapp.workout'] } }));
+      return res.end(JSON.stringify({ webcredentials: { apps: ['7FJYSD96DH.com.setapp.workout'] }, applinks: { apps: [], details: [{ appID: '7FJYSD96DH.com.setapp.workout', appIDs: ['7FJYSD96DH.com.setapp.workout'], paths: ['/i/*'], components: [{ '/': '/i/*' }] }] } }));
     }
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     if (req.method !== 'GET') return send(res, 405, 'x');

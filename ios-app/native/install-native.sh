@@ -45,6 +45,7 @@ $PB -c "Print :aps-environment" "$ENT" >/dev/null 2>&1 || $PB -c "Add :aps-envir
 $PB -c "Print :com.apple.security.application-groups" "$ENT" >/dev/null 2>&1 || { $PB -c "Add :com.apple.security.application-groups array" "$ENT"; $PB -c "Add :com.apple.security.application-groups:0 string group.com.setapp.workout" "$ENT"; }
 $PB -c "Print :com.apple.developer.healthkit" "$ENT" >/dev/null 2>&1 || $PB -c "Add :com.apple.developer.healthkit bool true" "$ENT"
 $PB -c "Print :com.apple.developer.associated-domains" "$ENT" >/dev/null 2>&1 || { $PB -c "Add :com.apple.developer.associated-domains array" "$ENT"; $PB -c "Add :com.apple.developer.associated-domains:0 string webcredentials:set-app-e0r6.onrender.com" "$ENT"; }
+grep -q "applinks:set-app-e0r6.onrender.com" "$ENT" || $PB -c "Add :com.apple.developer.associated-domains: string applinks:set-app-e0r6.onrender.com" "$ENT"
 PL="$A/App/Info.plist"
 $PB -c "Print :NSSupportsLiveActivities" "$PL" >/dev/null 2>&1 || $PB -c "Add :NSSupportsLiveActivities bool true" "$PL"
 $PB -c "Set :NSHealthUpdateUsageDescription שמירת אימוני הכוח שלך ומשקל שתרשום ב-Apple Health" "$PL" 2>/dev/null || true
