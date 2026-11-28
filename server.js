@@ -79,9 +79,12 @@ function inviteHtml(code, who, gift, uname) {
 }
 function promoFind(code) { const c = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, ''); const pr = (db.promos || {})[c]; return pr && !pr.off ? pr : null; }
 /* מחיל קוד על משתמש חדש או קיים: קוד מתנה של המנהל נותן חודש חינם, קוד של חבר רק נרשם ("הובא על ידי") */
-function applyCode(u, code) {
+// אפליקציית האייפון (Capacitor) מוסיפה סימון ל-User-Agent. שם אסור לתת זמן מנוי חינם דרך קוד (App Store 3.1.1)
+function isIOSApp(req) { return /Set(HK|SIWA|Edge)\//.test(String((req && req.headers && req.headers['user-agent']) || '')); }
+function applyCode(u, code, noGift) {
   const pr = promoFind(code);
   if (pr) {
+    if (noGift) return { error: 'קודי מתנה מופעלים דרך האתר' };
     if (u.promo) return { error: 'כבר הוזן קוד מתנה' };
     if (pr.max && (pr.uses || []).length >= pr.max) return { error: 'הקוד מוצה' };
     u.promo = pr.code; u.trialEnd = Math.max(u.trialEnd || 0, Date.now()) + (pr.days || 30) * DAY;
@@ -94,7 +97,7 @@ function applyCode(u, code) {
     if (r.refBy === u.id) return { error: 'אי אפשר להזמין זה את זה' };
     u.refBy = r.id;
     try { socialHandle.befriend(u.id, r.id); } catch (e) {}
-    if (r.amb && !u.refGift) { u.refGift = Date.now(); u.trialEnd = Math.max(u.trialEnd || 0, Date.now()) + REF_FRIEND_MS; return { ok: true, gift: true, friend: true }; }
+    if (r.amb && !u.refGift && !noGift) { u.refGift = Date.now(); u.trialEnd = Math.max(u.trialEnd || 0, Date.now()) + REF_FRIEND_MS; return { ok: true, gift: true, friend: true }; }
     return { ok: true, gift: false, friend: true };
   }
   return { error: 'קוד לא נמצא' };
@@ -386,7 +389,7 @@ async function api(req, res, url) {
     const user = { id: rid(8), trialEnd: 0, name, role, email, terms: { at: Date.now(), v: TERMS_V }, salt, hash: await scrypt(pw, salt), created: Date.now() };
     db.users[name] = user;
     const refC = b.ref || cookies(req).sref;
-    if (role === 'trainee' && refC) applyCode(user, refC);
+    if (role === 'trainee' && refC) applyCode(user, refC, isIOSApp(req));
     if (user.blocked) return send(res, 403, { error: 'החשבון חסום. לפרטים פנה לתמיכה' });
     save();
     return send(res, 200, { ok: true }, { 'Set-Cookie': newSession(req, res, user) });
@@ -402,7 +405,7 @@ async function api(req, res, url) {
     const nm = freeName('מתאמן ' + (1000 + crypto.randomInt(9000))), salt = rid(16);
     const user = { id: rid(8), trialEnd: 0, name: nm, role: 'trainee', guest: true, nopw: true, terms: { at: now, v: TERMS_V }, salt, hash: await scrypt(rid(24), salt), created: now };
     db.users[normName(nm)] = user;
-    const refC = b.ref || cookies(req).sref; if (refC) applyCode(user, refC);
+    const refC = b.ref || cookies(req).sref; if (refC) applyCode(user, refC, isIOSApp(req));
     save();
     return send(res, 200, { ok: true }, { 'Set-Cookie': newSession(req, res, user) });
   }
@@ -443,7 +446,7 @@ async function api(req, res, url) {
       user = { id: rid(8), trialEnd: 0, name: nm, role: 'trainee', email: email || undefined, oauth: { [prov]: pay.sub }, nopw: true, terms: { at: Date.now(), v: TERMS_V }, salt, hash: await scrypt(rid(24), salt), created: Date.now() };
       db.users[normName(nm)] = user;
       const refC = b.ref || cookies(req).sref;
-      if (refC) applyCode(user, refC);
+      if (refC) applyCode(user, refC, isIOSApp(req));
     }
     if (prov === 'apple' && b.code && !user.siwaRt) { const rt = await siwaExchange(b.code); if (rt) user.siwaRt = rt; }
     save();
@@ -612,7 +615,7 @@ async function api(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/referral/redeem') {
     const b = await readBody(req);
     if (me.role !== 'trainee') return send(res, 400, { error: 'הקוד מיועד למתאמנים' });
-    const r = applyCode(me, b.code);
+    const r = applyCode(me, b.code, isIOSApp(req));
     if (r.error) return send(res, 400, r);
     save(); return send(res, 200, { ok: true, gift: r.gift });
   }
@@ -1003,7 +1006,7 @@ const server = http.createServer(async (req, res) => {
       if (meI && ru && ru.id !== meI.id) { const ok = socialHandle.befriend(meI.id, ru.id); res.writeHead(302, { Location: '/?fr=' + (ok ? '1' : '0') }); return res.end(); }
       // בתוך האפליקציה (Universal Link) בלי חשבון: ישר להרשמה, והקוד נשמר בעוגייה כדי שתהיו חברים
       if (!meI && ru && /SetHK\/|SetAnd\//.test(req.headers['user-agent'] || '')) { res.writeHead(302, { Location: '/login#up', 'Set-Cookie': 'sref=' + code + '; Path=/; Max-Age=' + (30 * 86400) + '; SameSite=Lax; Secure' }); return res.end(); }
-      const gift = ru ? (ru.amb ? 'חודש ראשון חינם במקום שבועיים' : '') : pr ? (pr.days === 30 ? 'חודש חינם' : pr.days + ' ימים חינם') : '';
+      const gift = isIOSApp(req) ? '' : ru ? (ru.amb ? 'חודש ראשון חינם במקום שבועיים' : '') : pr ? (pr.days === 30 ? 'חודש חינם' : pr.days + ' ימים חינם') : '';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Set-Cookie': r ? 'sref=' + code + '; Path=/; Max-Age=' + (30 * 86400) + '; SameSite=Lax; Secure' : 'sref=; Path=/; Max-Age=0' });
       return res.end(inviteHtml(r ? code : '', ru && ru.name ? String(ru.name).split(/[\s_.]/)[0].slice(0, 20) : '', gift, ru ? ru.name : ''));
     }
